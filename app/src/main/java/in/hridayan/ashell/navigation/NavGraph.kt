@@ -37,6 +37,7 @@ import `in`.hridayan.ashell.settings.presentation.page.mainscreen.screen.Setting
 import `in`.hridayan.ashell.shell.file_browser.presentation.screens.FileBrowserScreen
 import `in`.hridayan.ashell.shell.local_adb_shell.presentation.screens.LocalAdbScreen
 import `in`.hridayan.ashell.shell.otg_adb_shell.presentation.screens.OtgAdbScreen
+import `in`.hridayan.ashell.userswitcher.UserSwitcherScreen
 import `in`.hridayan.ashell.shell.wifi_adb_shell.presentation.screens.PairingOtherDeviceScreen
 import `in`.hridayan.ashell.shell.wifi_adb_shell.presentation.screens.PairingOwnDeviceScreen
 import `in`.hridayan.ashell.shell.wifi_adb_shell.presentation.screens.WifiAdbScreen
@@ -226,7 +227,7 @@ fun Navigation(isFirstLaunch: Boolean = false) {
                 popExitTransition = { slideFadeOutToRight() }
             ) {
                 // Call into our Compose screen that handles pairing, connecting and switching users.
-                in.hridayan.ashell.userswitcher.UserSwitcherScreen()
+                UserSwitcherScreen()
             }
         }
     }

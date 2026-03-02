@@ -1,4 +1,4 @@
-package in.hridayan.ashell.userswitcher.adb
+package `in`.hridayan.ashell.userswitcher.adb
 
 import android.content.Context
 import android.os.Build

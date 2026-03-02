@@ -1,8 +1,8 @@
-package in.hridayan.ashell.userswitcher
+package `in`.hridayan.ashell.userswitcher
 
 import android.content.Context
 import android.util.Log
-import in.hridayan.ashell.userswitcher.adb.EasyAdbConnectionManager
+import `in`.hridayan.ashell.userswitcher.adb.EasyAdbConnectionManager
 import io.github.muntashirakon.adb.AbsAdbConnectionManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext

@@ -1,4 +1,4 @@
-package in.hridayan.ashell.userswitcher
+package `in`.hridayan.ashell.userswitcher
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
