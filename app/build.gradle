@@ -53,6 +53,15 @@ dependencies {
     // will cause unresolved reference errors during compilation. This library
     // packages the necessary classes under the `android.sun` namespace.
     implementation 'com.github.MuntashirAkon:sun-security-android:1.1'
+
+    // Bouncy Castle provider for cryptographic primitives used by libadb.
+    // This brings in classes such as KeyParameter, GCMBlockCipher, AESEngine,
+    // and Base64 encoders from org.bouncycastle.
+    implementation 'org.bouncycastle:bcprov-jdk15to18:1.83'
+
+    // SPAKE2 implementation used by PairingAuthCtx. Pull via JitPack. The
+    // version suffix `-SNAPSHOT` fetches the latest commit from the repo.
+    implementation 'com.github.Mahmud0808.spake2-java:spake2-android:-SNAPSHOT'
     // The Kotlin standard library may be pulled in by multiple transitive
     // dependencies at different versions. Force all kotlin‑stdlib artifacts to
     // align on the same version to avoid the D8 duplicate class error.
