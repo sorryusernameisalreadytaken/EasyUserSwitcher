@@ -47,6 +47,12 @@ dependencies {
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.0'
     // Lifecycle library for coroutines scope within activities
     implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.7.0'
+
+    // Provide sun.security and x509 certificate classes for Android. Without this
+    // dependency, classes such as android.sun.security.x509.* are unavailable and
+    // will cause unresolved reference errors during compilation. This library
+    // packages the necessary classes under the `android.sun` namespace.
+    implementation 'com.github.MuntashirAkon:sun-security-android:1.1'
     // The Kotlin standard library may be pulled in by multiple transitive
     // dependencies at different versions. Force all kotlin‑stdlib artifacts to
     // align on the same version to avoid the D8 duplicate class error.

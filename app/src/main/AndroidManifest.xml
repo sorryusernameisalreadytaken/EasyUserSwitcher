@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="eu.eus">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <!-- Internet permission is required so we can open a TCP connection to the
          ADB daemon running on the same device. Without this permission the

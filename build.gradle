@@ -5,6 +5,10 @@ buildscript {
     repositories {
         google()
         mavenCentral()
+        // Include JitPack to resolve third‑party libraries such as sun‑security‑android
+        maven {
+            url = uri("https://jitpack.io")
+        }
     }
     dependencies {
         // Use a recent version of the Android Gradle Plugin. This version targets
@@ -19,6 +23,10 @@ allprojects {
     repositories {
         google()
         mavenCentral()
+        // Include JitPack repository for dependencies published via GitHub
+        maven {
+            url = uri("https://jitpack.io")
+        }
     }
 }
 

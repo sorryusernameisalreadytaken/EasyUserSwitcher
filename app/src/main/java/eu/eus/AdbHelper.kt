@@ -133,7 +133,25 @@ class AdbHelper(private val context: Context) {
      */
     suspend fun switchUser(targetUser: Int, mainUser: Int = 0) = withContext(Dispatchers.IO) {
         if (!isConnected()) return@withContext
-        val script = "TARGET_USER=$targetUser; MAIN_USER=$mainUser; am switch-user $targetUser; sleep 2; while true; do CURRENT=$(am get-current-user); if [ \"$CURRENT\" != \"$targetUser\" ]; then exit 0; fi; if dumpsys input | grep -q \"Interactive = false\"; then break; fi; sleep 10; done; am switch-user $mainUser"
+        // Build a shell script that switches to the target user, waits until the
+        // device becomes idle and then switches back to the main user. A literal
+        // dollar sign (${ '$' }) is used to reference the CURRENT variable inside
+        // the script; we must escape it to prevent Kotlin string interpolation.
+        val script = """
+            TARGET_USER=$targetUser
+            MAIN_USER=$mainUser
+            am switch-user $targetUser
+            sleep 2
+            while true; do
+                CURRENT=$(am get-current-user)
+                # exit if the user has been switched manually
+                if [ "${'$'}CURRENT" != "$targetUser" ]; then exit 0; fi
+                # break once the device is no longer interactive (screen off)
+                if dumpsys input | grep -q "Interactive = false"; then break; fi
+                sleep 10
+            done
+            am switch-user $mainUser
+        """.trimIndent().replace("\n", "; ")
         // We don't need the output of this command. Fire and forget.
         executeShell(script)
     }
