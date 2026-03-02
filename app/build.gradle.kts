@@ -105,6 +105,18 @@ android {
         includeInApk = false
         includeInBundle = false
     }
+
+    // Exclude duplicated adb library sources from the app module. These classes are provided
+    // by the libadb and adblib modules. Without this exclusion they conflict with the
+    // module dependency and fail to compile due to missing bouncycastle classes.
+    sourceSets {
+        getByName("main") {
+            java {
+                // Exclude the package copied from EasyUserSwitcher to avoid duplicate classes
+                exclude("io/github/muntashirakon/adb/**")
+            }
+        }
+    }
 }
 
 dependencies {
