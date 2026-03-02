@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:padding="16dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="EasyUserSwitcher"
+            android:textAppearance="@style/TextAppearance.AppCompat.Large"
+            android:gravity="center_horizontal"
+            android:paddingBottom="16dp" />
+
+        <EditText
+            android:id="@+id/host_input"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Host (e.g. 127.0.0.1)"
+            android:inputType="text"
+            android:text="127.0.0.1" />
+
+        <EditText
+            android:id="@+id/connect_port_input"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Connect port (default 5555)"
+            android:inputType="number"
+            android:text="5555" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+            <EditText
+                android:id="@+id/pairing_port_input"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:hint="Pairing port"
+                android:inputType="number" />
+            <EditText
+                android:id="@+id/pairing_code_input"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:hint="Pairing code"
+                android:inputType="number" />
+        </LinearLayout>
+
+        <Button
+            android:id="@+id/pair_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Pair" />
+
+        <Button
+            android:id="@+id/connect_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Connect" />
+
+        <Button
+            android:id="@+id/load_users_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Load users" />
+
+        <TextView
+            android:id="@+id/status_text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="8dp"
+            android:text="Status: not connected"
+            android:textAppearance="@style/TextAppearance.AppCompat.Small" />
+
+        <ListView
+            android:id="@+id/user_list"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:divider="@android:color/darker_gray"
+            android:dividerHeight="1dp" />
+
+    </LinearLayout>
+
+</ScrollView>

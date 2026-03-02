@@ -1,0 +1,1 @@
+# ProGuard rules are intentionally left empty for this sample project.

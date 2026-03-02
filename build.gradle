@@ -1,0 +1,28 @@
+// Top-level build file for the EasyUserSwitcher project.
+// It defines repositories and the Android Gradle Plugin version.
+
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        // Use a recent version of the Android Gradle Plugin. This version targets
+        // Android Gradle Plugin 8.2 which is compatible with compileSdkVersion 34.
+        classpath 'com.android.tools.build:gradle:8.2.1'
+        // Kotlin plugin to allow compiling Kotlin sources in the app module.
+        classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:1.8.22'
+    }
+}
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+// Clean task to remove build outputs.
+tasks.register('clean', Delete) {
+    delete rootProject.buildDir
+}

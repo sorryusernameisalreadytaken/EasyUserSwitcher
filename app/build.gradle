@@ -1,0 +1,70 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+}
+
+android {
+    namespace 'eu.eus'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "eu.eus"
+        minSdk 26
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+
+        // We need to allow cleartext traffic to 127.0.0.1 for ADB connections over TCP
+        // by disabling network security configuration. We can rely on android:usesCleartextTraffic
+        // in the manifest instead of a separate network security config file.
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            // no special flags
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+    buildFeatures {
+        viewBinding true
+    }
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'androidx.core:core-ktx:1.13.1'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.0'
+    // Lifecycle library for coroutines scope within activities
+    implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.7.0'
+    // The Kotlin standard library may be pulled in by multiple transitive
+    // dependencies at different versions. Force all kotlin‑stdlib artifacts to
+    // align on the same version to avoid the D8 duplicate class error.
+    constraints {
+        implementation('org.jetbrains.kotlin:kotlin-stdlib') {
+            version {
+                strictly '1.8.22'
+            }
+        }
+        implementation('org.jetbrains.kotlin:kotlin-stdlib-jdk7') {
+            version {
+                strictly '1.8.22'
+            }
+        }
+        implementation('org.jetbrains.kotlin:kotlin-stdlib-jdk8') {
+            version {
+                strictly '1.8.22'
+            }
+        }
+    }
+}

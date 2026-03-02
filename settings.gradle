@@ -1,0 +1,2 @@
+rootProject.name = "EasyUserSwitcher"
+include(":app")
