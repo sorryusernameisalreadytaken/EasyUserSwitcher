@@ -6,7 +6,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
+// import androidx.compose.material3.OutlinedTextField // removed unused
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -19,7 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.Alignment
-import androidx.compose.foundation.layout.Arrangement
+// import androidx.compose.foundation.layout.Arrangement // removed unused
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 
@@ -35,19 +35,22 @@ import androidx.compose.runtime.rememberCoroutineScope
 fun UserSwitcherScreen() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    // Use the shared ADB helper which delegates to the global AdbConnectionManager
     val adbHelper = remember { AdbHelper(context) }
 
-    var host by rememberSaveable { mutableStateOf("127.0.0.1") }
-    var pairingPort by rememberSaveable { mutableStateOf("") }
-    var pairingCode by rememberSaveable { mutableStateOf("") }
-    var connectPort by rememberSaveable { mutableStateOf("5555") }
-    var status by rememberSaveable { mutableStateOf("not connected") }
+    // Keep track of status and loaded users. The status will reflect
+    // whether we are connected, loading users, or any error messages.
+    var status by rememberSaveable { mutableStateOf("") }
     var users by remember { mutableStateOf(listOf<Pair<Int, String>>()) }
 
-    // Helper to update the status text. This runs on the UI thread because
-    // Compose state updates are thread‑confined.
+    // Convenience to update the status from various callbacks.
     fun updateStatus(msg: String) {
         status = msg
+    }
+
+    // On first composition, set the initial status based on connection state.
+    LaunchedEffect(Unit) {
+        updateStatus(if (adbHelper.isConnected()) "Connected" else "No ADB connection")
     }
 
     Column(
@@ -62,86 +65,23 @@ fun UserSwitcherScreen() {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        OutlinedTextField(
-            value = host,
-            onValueChange = { host = it },
-            label = { Text("Host") },
-            modifier = Modifier.fillMaxWidth()
-        )
+        // Inform the user when no ADB connection is available. The rest of the
+        // UI remains disabled until an ADB connection has been established via
+        // Local ADB, wireless debugging or OTG in other parts of the app.
+        val isConnected = adbHelper.isConnected()
+        if (!isConnected) {
+            Text(
+                text = "No ADB connection. Please connect via Local ADB, Wireless debugging or OTG first.",
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
+        }
 
-        Spacer(modifier = Modifier.height(8.dp))
-
-        OutlinedTextField(
-            value = pairingPort,
-            onValueChange = { pairingPort = it },
-            label = { Text("Pairing Port") },
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        OutlinedTextField(
-            value = pairingCode,
-            onValueChange = { pairingCode = it },
-            label = { Text("Pairing Code") },
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        OutlinedTextField(
-            value = connectPort,
-            onValueChange = { connectPort = it },
-            label = { Text("Connect Port") },
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Row of actions: Pair, Connect, Load Users
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Button(onClick = {
-                // Validate pairing inputs
-                val port = pairingPort.toIntOrNull()
-                if (pairingPort.isBlank() || pairingCode.isBlank() || port == null) {
-                    updateStatus("Please enter valid pairing port and code")
-                    return@Button
-                }
-                updateStatus("Pairing…")
-                scope.launch {
-                    val success = adbHelper.pair(
-                        host.ifBlank { "127.0.0.1" },
-                        port,
-                        pairingCode.trim()
-                    )
-                    updateStatus(if (success) "Pairing successful" else "Pairing failed")
-                }
-            }) {
-                Text("Pair")
-            }
-
-            Button(onClick = {
-                val port = connectPort.toIntOrNull() ?: 5555
-                updateStatus("Connecting…")
-                scope.launch {
-                    val connected = adbHelper.connect(
-                        host.ifBlank { "127.0.0.1" },
-                        port
-                    )
-                    updateStatus(if (connected) "Connected" else "Already connected or failed")
-                }
-            }) {
-                Text("Connect")
-            }
-
-            Button(onClick = {
-                if (!adbHelper.isConnected()) {
-                    updateStatus("Connect to ADB first")
-                    return@Button
-                }
+        // Action button to load users. Enabled only when we have an active
+        // ADB connection. When clicked, it fetches the list of users via
+        // `pm list users` and populates the users state.
+        Button(
+            onClick = {
                 updateStatus("Loading users…")
                 scope.launch {
                     val output = adbHelper.executeShell("pm list users")
@@ -153,9 +93,10 @@ fun UserSwitcherScreen() {
                         updateStatus("${'$'}{parsed.size} users loaded")
                     }
                 }
-            }) {
-                Text("Load Users")
-            }
+            },
+            enabled = isConnected
+        ) {
+            Text("Load Users")
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -164,7 +105,9 @@ fun UserSwitcherScreen() {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // List of users. Each row is clickable to switch user.
+        // List of users. Each row is clickable to switch user. The list is
+        // displayed regardless of connection state – if users are loaded,
+        // they remain visible. Tapping on a user triggers the switch script.
         LazyColumn(
             modifier = Modifier.weight(1f)
         ) {
@@ -173,6 +116,11 @@ fun UserSwitcherScreen() {
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable {
+                            // Only allow switching if currently connected
+                            if (!adbHelper.isConnected()) {
+                                updateStatus("No ADB connection to switch user")
+                                return@clickable
+                            }
                             scope.launch {
                                 updateStatus("Switching to ${'$'}name (${'$'}id)…")
                                 adbHelper.switchUser(id, 0)

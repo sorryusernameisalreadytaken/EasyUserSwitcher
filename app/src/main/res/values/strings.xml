@@ -201,6 +201,8 @@
     <!-- Easy User Switcher -->
     <string name="user_switcher">User Switcher</string>
     <string name="user_switcher_summary">Switch between Android user profiles via Wi‑Fi ADB</string>
+    <!-- Shown when the user switcher card is tapped without an active ADB connection -->
+    <string name="user_switcher_requires_connection">Please establish an ADB connection (Local, Wireless or OTG) before using the user switcher.</string>
     <string name="field_cannot_be_blank">Field cannot be blank</string>
     <string name="file">File</string>
     <string name="file_actions">File actions</string>

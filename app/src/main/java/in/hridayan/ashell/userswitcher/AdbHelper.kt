@@ -2,7 +2,7 @@ package `in`.hridayan.ashell.userswitcher
 
 import android.content.Context
 import android.util.Log
-import `in`.hridayan.ashell.userswitcher.adb.EasyAdbConnectionManager
+import `in`.hridayan.ashell.shell.common.data.adb.AdbConnectionManager
 import io.github.muntashirakon.adb.AbsAdbConnectionManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -18,7 +18,12 @@ import java.io.InputStreamReader
 class AdbHelper(private val context: Context) {
 
     private val adbManager: AbsAdbConnectionManager by lazy {
-        EasyAdbConnectionManager.getInstance(context)
+        // Use the same global ADB connection manager as the rest of the app. This
+        // allows the easy user switcher to piggy‑back on existing connections
+        // established via Local ADB, wireless debugging or OTG. Without this,
+        // the helper would create a separate connection manager and ignore the
+        // connection that may already be open.
+        AdbConnectionManager.getInstance(context)
     }
 
     /**
