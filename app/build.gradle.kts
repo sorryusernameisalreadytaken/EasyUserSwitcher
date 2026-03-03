@@ -11,9 +11,12 @@ plugins {
 }
 
 android {
-    // Set a unique namespace for the EasyUserSwitcher app. This should match the
-    // applicationId defined below.
-    namespace = "eu.eus"
+    // Generate the R class in the same package as the original aShell app.  This
+    // ensures that imports like `in.hridayan.ashell.R` continue to resolve
+    // correctly, while still allowing the applicationId to use a different
+    // namespace (eu.eus) for installation.  Do not change this unless you
+    // update all package references throughout the app.
+    namespace = "in.hridayan.ashell"
     compileSdk = 36
 
     defaultConfig {

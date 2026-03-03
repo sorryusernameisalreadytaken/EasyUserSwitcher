@@ -106,6 +106,13 @@
             android:exported="false"
             android:foregroundServiceType="connectedDevice" />
 
+        <!-- Activity invoked by launcher shortcuts to trigger a user switch via ADB. -->
+        <activity
+            android:name=".userswitcher.UserSwitchShortcutActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:theme="@style/Theme.AShellYou" />
+
     </application>
 
 </manifest>

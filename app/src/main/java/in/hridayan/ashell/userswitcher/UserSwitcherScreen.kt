@@ -20,6 +20,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import `in`.hridayan.ashell.R
+import `in`.hridayan.ashell.userswitcher.UserSwitchShortcutActivity
+import android.content.Intent
 import kotlinx.coroutines.launch
 
 /**
@@ -94,28 +96,28 @@ fun UserSwitcherScreen() {
                         // Create dynamic shortcuts for up to four users (excluding owner)
                         val shortcutManager = context.getSystemService(android.content.pm.ShortcutManager::class.java)
                         if (shortcutManager != null) {
-                            val dynamicShortcuts = parsed.mapNotNull { (id, name, _) ->
-                                if (id == 0) return@mapNotNull null
-                                val shortcutId = "eus_user_${'$'}id"
-                                val iconName = "ic_user_switcher_${'$'}id"
-                                val resId = context.resources.getIdentifier(iconName, "drawable", context.packageName)
-                                val iconRes = if (resId != 0) resId else R.drawable.ic_user_switcher
-                                android.content.pm.ShortcutInfo.Builder(context, shortcutId)
-                                    .setShortLabel(name)
-                                    .setLongLabel("Switch to ${'$'}name")
-                                    .setIcon(android.graphics.drawable.Icon.createWithResource(context, iconRes))
-                                    .setIntent(
-                                        android.content.Intent(context, UserSwitchShortcutActivity::class.java).apply {
-                                            action = android.content.Intent.ACTION_VIEW
-                                            putExtra("user_id", id)
-                                            putExtra("user_name", name)
-                                        }
-                                    )
-                                    .build()
+                        val dynamicShortcuts = parsed.mapNotNull { (id, name, _) ->
+                            // Skip owner (0) for dynamic shortcuts
+                            if (id == 0) return@mapNotNull null
+                            val shortcutId = "eus_user_$id"
+                            val iconName = "ic_user_switcher_$id"
+                            val resId = context.resources.getIdentifier(iconName, "drawable", context.packageName)
+                            val iconRes = if (resId != 0) resId else R.drawable.ic_user_switcher
+                            val intent = Intent(context, UserSwitchShortcutActivity::class.java).apply {
+                                action = Intent.ACTION_VIEW
+                                putExtra("user_id", id)
+                                putExtra("user_name", name)
                             }
-                            shortcutManager.dynamicShortcuts = dynamicShortcuts.take(4)
+                            android.content.pm.ShortcutInfo.Builder(context, shortcutId)
+                                .setShortLabel(name)
+                                .setLongLabel("Switch to $name")
+                                .setIcon(android.graphics.drawable.Icon.createWithResource(context, iconRes))
+                                .setIntent(intent)
+                                .build()
                         }
-                        updateStatus("${'$'}{parsed.size} users loaded")
+                        shortcutManager.dynamicShortcuts = dynamicShortcuts.take(4)
+                        }
+                        updateStatus("${parsed.size} users loaded")
                     }
                 }
             },
@@ -126,7 +128,7 @@ fun UserSwitcherScreen() {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        Text(text = "Status: ${'$'}status")
+        Text(text = "Status: $status")
 
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -151,13 +153,13 @@ fun UserSwitcherScreen() {
                                     return@combinedClickable
                                 }
                                 scope.launch {
-                                    updateStatus("Switching to ${'$'}name (${'$'}id)…")
+                                    updateStatus("Switching to $name ($id)…")
                                     val result = adbHelper.switchUser(id, 0)
                                     if (result != null && result.isNotBlank()) {
                                         // Show any error output from the command
                                         updateStatus(result.trim())
                                     } else {
-                                        updateStatus("Switch command sent for ${'$'}name")
+                                        updateStatus("Switch command sent for $name")
                                     }
                                 }
                             },
@@ -166,16 +168,16 @@ fun UserSwitcherScreen() {
                                 if (id == 0) return@combinedClickable
                                 val shortcutManager = context.getSystemService(android.content.pm.ShortcutManager::class.java)
                                 if (shortcutManager != null && shortcutManager.isRequestPinShortcutSupported) {
-                                    val iconName = "ic_user_switcher_${'$'}id"
+                                    val iconName = "ic_user_switcher_$id"
                                     val resId = context.resources.getIdentifier(iconName, "drawable", context.packageName)
                                     val iconRes = if (resId != 0) resId else R.drawable.ic_user_switcher
-                                    val shortcut = android.content.pm.ShortcutInfo.Builder(context, "eus_pin_user_${'$'}id")
+                                    val shortcut = android.content.pm.ShortcutInfo.Builder(context, "eus_pin_user_$id")
                                         .setShortLabel(name)
-                                        .setLongLabel("Switch to ${'$'}name")
+                                        .setLongLabel("Switch to $name")
                                         .setIcon(android.graphics.drawable.Icon.createWithResource(context, iconRes))
                                         .setIntent(
-                                            android.content.Intent(context, UserSwitchShortcutActivity::class.java).apply {
-                                                action = android.content.Intent.ACTION_VIEW
+                                            Intent(context, UserSwitchShortcutActivity::class.java).apply {
+                                                action = Intent.ACTION_VIEW
                                                 putExtra("user_id", id)
                                                 putExtra("user_name", name)
                                             }
