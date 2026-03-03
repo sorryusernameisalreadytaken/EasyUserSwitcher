@@ -1,6 +1,7 @@
 package `in`.hridayan.ashell.userswitcher
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -90,7 +91,29 @@ fun UserSwitcherScreen() {
                     } else {
                         val parsed = adbHelper.parseUsers(output)
                         users = parsed
-                        updateStatus("${'$'}{parsed.size} users loaded")
+                        // Set up dynamic shortcuts for loaded users. These shortcuts appear
+                        // when long‑pressing the app icon in the launcher. Each shortcut
+                        // launches a special activity that performs the user switch.
+                        val shortcutManager = context.getSystemService(android.content.pm.ShortcutManager::class.java)
+                        if (shortcutManager != null) {
+                            val dynamicShortcuts = parsed.map { (id, name) ->
+                                android.content.pm.ShortcutInfo.Builder(context, "eus_user_$id")
+                                    .setShortLabel(name)
+                                    .setLongLabel("Switch to $name")
+                                    .setIcon(android.graphics.drawable.Icon.createWithResource(context, R.drawable.ic_user_switcher))
+                                    .setIntent(
+                                        android.content.Intent(context, UserSwitchShortcutActivity::class.java).apply {
+                                            action = android.content.Intent.ACTION_VIEW
+                                            putExtra("user_id", id)
+                                            putExtra("user_name", name)
+                                        }
+                                    )
+                                    .build()
+                            }
+                            // Limit the number of dynamic shortcuts to avoid exceeding the system cap.
+                            shortcutManager.dynamicShortcuts = dynamicShortcuts.take(4)
+                        }
+                        updateStatus("${parsed.size} users loaded")
                     }
                 }
             },
@@ -101,7 +124,7 @@ fun UserSwitcherScreen() {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        Text(text = "Status: ${'$'}status")
+        Text(text = "Status: $status")
 
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -115,23 +138,46 @@ fun UserSwitcherScreen() {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable {
-                            // Only allow switching if currently connected
-                            if (!adbHelper.isConnected()) {
-                                updateStatus("No ADB connection to switch user")
-                                return@clickable
+                        // Use combinedClickable to handle both click and long‑press actions.
+                        .combinedClickable(
+                            onClick = {
+                                // Only allow switching if currently connected
+                                if (!adbHelper.isConnected()) {
+                                    updateStatus("No ADB connection to switch user")
+                                    return@combinedClickable
+                                }
+                                scope.launch {
+                                    updateStatus("Switching to $name ($id)…")
+                                    adbHelper.switchUser(id, 0)
+                                    updateStatus("Switch command sent for $name")
+                                }
+                            },
+                            onLongClick = {
+                                // On long press, request a pinned shortcut so the user can
+                                // add a separate icon to their launcher for this profile.
+                                val shortcutManager = context.getSystemService(android.content.pm.ShortcutManager::class.java)
+                                if (shortcutManager != null && shortcutManager.isRequestPinShortcutSupported) {
+                                    val shortcut = android.content.pm.ShortcutInfo.Builder(context, "eus_pin_user_$id")
+                                        .setShortLabel(name)
+                                        .setLongLabel("Switch to $name")
+                                        .setIcon(android.graphics.drawable.Icon.createWithResource(context, R.drawable.ic_user_switcher))
+                                        .setIntent(
+                                            android.content.Intent(context, UserSwitchShortcutActivity::class.java).apply {
+                                                action = android.content.Intent.ACTION_VIEW
+                                                putExtra("user_id", id)
+                                                putExtra("user_name", name)
+                                            }
+                                        )
+                                        .build()
+                                    shortcutManager.requestPinShortcut(shortcut, null)
+                                }
                             }
-                            scope.launch {
-                                updateStatus("Switching to ${'$'}name (${'$'}id)…")
-                                adbHelper.switchUser(id, 0)
-                                updateStatus("Switch command sent for ${'$'}name")
-                            }
-                        }
+                        )
                         .padding(vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "${'$'}name (${'$'}id)",
+                        text = "$name ($id)",
                         style = MaterialTheme.typography.bodyLarge
                     )
                 }

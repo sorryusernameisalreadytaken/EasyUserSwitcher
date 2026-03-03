@@ -21,7 +21,7 @@
     <!-- App name shown on the launcher and within the application -->
     <string name="app_name" translatable="false">EasyUserSwitcher</string>
     <!-- Short tagline describing the purpose of this app -->
-    <string name="app_tagline">Switch Android profiles easily via Wi‑Fi ADB</string>
+    <string name="app_tagline">Simple user switcher</string>
     <string name="apply_to_all">Apply to all (%1$d remaining)</string>
     <string name="auto_update">Auto update</string>
     <string name="back">Back</string>

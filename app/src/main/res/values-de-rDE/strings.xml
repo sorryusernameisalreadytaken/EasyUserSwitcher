@@ -18,7 +18,8 @@
     <string name="already_latest_version">Du nutzt die neueste Version</string>
     <string name="app">App</string>
     <string name="app_crashed">App ist Abgestürzt</string>
-    <string name="app_tagline">ADB an deinen Fingerspitzen</string>
+    <!-- Tagline in German reflecting the modified purpose -->
+    <string name="app_tagline">Einfacher Benutzerwechsel</string>
     <string name="apply_to_all">Auf alle anwenden (%1$d verbleibend)</string>
     <string name="auto_update">Auto-Update</string>
     <string name="back">Zurück</string>
