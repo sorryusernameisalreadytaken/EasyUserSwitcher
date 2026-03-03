@@ -11,15 +11,21 @@ plugins {
 }
 
 android {
-    namespace = "in.hridayan.ashell"
+    // Set a unique namespace for the EasyUserSwitcher app. This should match the
+    // applicationId defined below.
+    namespace = "eu.eus"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "in.hridayan.ashell"
+        // The applicationId uniquely identifies this app on a device and in the Google Play
+        // ecosystem. Use the simple and memorable ID provided by the user.
+        applicationId = "eu.eus"
         minSdk = 28
         targetSdk = 36
-        versionCode = 58
-        versionName = "v7.1.0"
+        // Reset versioning for the new application. Starting with versionCode 1 and
+        // a simple semantic version string. Bump these values as you release updates.
+        versionCode = 1
+        versionName = "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -106,17 +112,9 @@ android {
         includeInBundle = false
     }
 
-    // Exclude duplicated adb library sources from the app module. These classes are provided
-    // by the libadb and adblib modules. Without this exclusion they conflict with the
-    // module dependency and fail to compile due to missing bouncycastle classes.
-    sourceSets {
-        getByName("main") {
-            java {
-                // Exclude the package copied from EasyUserSwitcher to avoid duplicate classes
-                exclude("io/github/muntashirakon/adb/**")
-            }
-        }
-    }
+    // All ADB classes are provided by the libadb and adblib modules. Remove any duplicate sources
+    // from the application module by deleting the corresponding directory in the project tree. We no
+    // longer configure an exclusion here because the duplicate sources are not included.
 }
 
 dependencies {
