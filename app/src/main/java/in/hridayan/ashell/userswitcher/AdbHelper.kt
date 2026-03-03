@@ -139,23 +139,32 @@ class AdbHelper(private val context: Context) {
     suspend fun switchUser(targetUser: Int, mainUser: Int = 0) = withContext(Dispatchers.IO) {
         if (!isConnected()) return@withContext
         // Build a shell script that switches to the target user, waits until the
-        // device becomes idle and then switches back to the main user. A literal
-        // dollar sign (${ '$' }) is used to reference the CURRENT variable inside
-        // the script; we must escape it to prevent Kotlin string interpolation.
+        // device becomes idle (screen off) and then switches back to the main user.
+        // The CURRENT user ID is extracted using tr to remove non‑digit characters
+        // because `am get-current-user` may include descriptive text on some OSes.
+        // We escape the dollar sign to prevent Kotlin from interpreting it as
+        // string interpolation. The script is flattened into a single line with
+        // semicolons to avoid issues with multi‑line shell input.
         val script = """
             TARGET_USER=$targetUser
             MAIN_USER=$mainUser
-            am switch-user $targetUser
+            # switch to the target user
+            am switch-user ${'$'}TARGET_USER
             sleep 2
             while true; do
-                CURRENT=$(am get-current-user)
-                # exit if the user has been switched manually
-                if [ "${'$'}CURRENT" != "$targetUser" ]; then exit 0; fi
-                # break once the device is no longer interactive (screen off)
-                if dumpsys input | grep -q "Interactive = false"; then break; fi
-                sleep 10
+                # extract the numeric current user ID
+                CURRENT=$(am get-current-user | tr -dc '0-9')
+                # exit early if the user has been manually switched away
+                if [ "${'$'}CURRENT" != "${'$'}TARGET_USER" ]; then exit 0; fi
+                # If the display is off, break out to return to the main user.  The
+                # Display Power state is more reliable than the Input Manager state on
+                # GrapheneOS.  When the screen is off, dumpsys power will report
+                # `Display Power: state=OFF`.
+                if dumpsys power | grep -q 'state=OFF'; then break; fi
+                sleep 5
             done
-            am switch-user $mainUser
+            # switch back to the main user
+            am switch-user ${'$'}MAIN_USER
         """.trimIndent().replace("\n", "; ")
         // We don't need the output of this command. Fire and forget.
         executeShell(script)
