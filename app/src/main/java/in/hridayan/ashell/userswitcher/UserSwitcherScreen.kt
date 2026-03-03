@@ -20,6 +20,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.Alignment
+// Import the generated R class from the application package to resolve drawable resources
+import `in`.hridayan.ashell.R
 // import androidx.compose.foundation.layout.Arrangement // removed unused
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
