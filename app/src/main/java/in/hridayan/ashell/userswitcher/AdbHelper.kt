@@ -2,7 +2,7 @@ package `in`.hridayan.ashell.userswitcher
 
 import android.content.Context
 import android.util.Log
-import `in`.hridayan.ashell.shell.common.data.adb.AdbConnectionManager
+import `in`.hridayan.ashell.userswitcher.adb.EasyAdbConnectionManager
 import io.github.muntashirakon.adb.AbsAdbConnectionManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -18,12 +18,7 @@ import java.io.InputStreamReader
 class AdbHelper(private val context: Context) {
 
     private val adbManager: AbsAdbConnectionManager by lazy {
-        // Use the same global ADB connection manager as the rest of the app. This
-        // allows the easy user switcher to piggy‑back on existing connections
-        // established via Local ADB, wireless debugging or OTG. Without this,
-        // the helper would create a separate connection manager and ignore the
-        // connection that may already be open.
-        AdbConnectionManager.getInstance(context)
+        EasyAdbConnectionManager.getInstance(context)
     }
 
     /**
@@ -112,7 +107,12 @@ class AdbHelper(private val context: Context) {
      * Parse the output of `pm list users` and return a list of pairs of
      * (userId, userLabel). Lines are expected to contain `UserInfo{<id>:<name>:`.
      */
-    fun parseUsers(output: String): List<Pair<Int, String>> {
+    /**
+     * Parse the output of `pm list users` and return a list of triples of
+     * (userId, userLabel, isRunning). Lines are expected to contain
+     * `UserInfo{<id>:<name>:` followed optionally by `running` at the end.
+     */
+    fun parseUsers(output: String): List<Triple<Int, String, Boolean>> {
         return output.lines()
             .mapNotNull { line ->
                 val start = line.indexOf("UserInfo{")
@@ -124,7 +124,8 @@ class AdbHelper(private val context: Context) {
                         if (parts.size >= 2) {
                             val idStr = parts[0]
                             val nameStr = parts[1]
-                            idStr.toIntOrNull()?.let { id -> id to nameStr }
+                            val running = line.contains("running")
+                            idStr.toIntOrNull()?.let { id -> Triple(id, nameStr, running) }
                         } else null
                     } else null
                 } else null
@@ -136,38 +137,44 @@ class AdbHelper(private val context: Context) {
      * the device becomes idle. The command runs entirely on the device and
      * exits when the switch back is complete. The main user defaults to 0.
      */
-    suspend fun switchUser(targetUser: Int, mainUser: Int = 0) = withContext(Dispatchers.IO) {
-        if (!isConnected()) return@withContext
-        // Build a shell script that switches to the target user, waits until the
-        // device becomes idle (screen off) and then switches back to the main user.
-        // The CURRENT user ID is extracted using tr to remove non‑digit characters
-        // because `am get-current-user` may include descriptive text on some OSes.
-        // We escape the dollar sign to prevent Kotlin from interpreting it as
-        // string interpolation. The script is flattened into a single line with
-        // semicolons to avoid issues with multi‑line shell input.
+    suspend fun switchUser(targetUser: Int, mainUser: Int = 0): String? = withContext(Dispatchers.IO) {
+        if (!isConnected()) return@withContext null
+        // Build a simple command to switch to the target user. We'll capture
+        // any output for error reporting. If this succeeds, we optionally
+        // schedule a return to the main user based on idle detection.
+        val switchCommand = "am switch-user $targetUser"
+        val result = executeShell(switchCommand)
+        // If the command returned anything it may indicate an error. The
+        // expected successful invocation typically returns no output.
+        if (result?.isNotBlank() == true) {
+            return@withContext result
+        }
+        // Schedule the auto-return to the main user using a background script.
+        // We don't need to wait for this to finish, but we still append our
+        // marker to ensure the shell command terminates. The script loops
+        // until the display turns off and then performs the switch back.
         val script = """
             TARGET_USER=$targetUser
             MAIN_USER=$mainUser
-            # switch to the target user
-            am switch-user ${'$'}TARGET_USER
-            sleep 2
-            while true; do
-                # extract the numeric current user ID
+            # Wait until the current user matches the target user to ensure the
+            # initial switch is complete. Bail out if switching fails.
+            for i in 1 2 3 4 5; do
                 CURRENT=$(am get-current-user | tr -dc '0-9')
-                # exit early if the user has been manually switched away
-                if [ "${'$'}CURRENT" != "${'$'}TARGET_USER" ]; then exit 0; fi
-                # If the display is off, break out to return to the main user.  The
-                # Display Power state is more reliable than the Input Manager state on
-                # GrapheneOS.  When the screen is off, dumpsys power will report
-                # `Display Power: state=OFF`.
+                [ "${'$'}CURRENT" = "${'$'}TARGET_USER" ] && break
+                sleep 1
+            done
+            # Poll until the display turns off, then switch back to main user
+            while true; do
+                CURRENT=$(am get-current-user | tr -dc '0-9')
+                [ "${'$'}CURRENT" != "${'$'}TARGET_USER" ] && exit 0
                 if dumpsys power | grep -q 'state=OFF'; then break; fi
                 sleep 5
             done
-            # switch back to the main user
             am switch-user ${'$'}MAIN_USER
         """.trimIndent().replace("\n", "; ")
-        // We don't need the output of this command. Fire and forget.
+        // Fire and forget the background script. We ignore its output.
         executeShell(script)
+        return@withContext null
     }
 
     companion object {

@@ -32,7 +32,7 @@ securityCrypto = "1.1.0"
 serialization = "1.9.0"
 shizuku = "13.1.0"
 slf4j = "1.7.36"
-spake2Android = "2.2.1"
+spake2Android = "-SNAPSHOT"
 splashscreen = "1.2.0"
 sunSecurityAndroid = "1.1"
 work = "2.11.0"
@@ -99,6 +99,6 @@ serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serializ
 shizuku-api = { module = "dev.rikka.shizuku:api", version.ref = "shizuku" }
 shizuku-provider = { module = "dev.rikka.shizuku:provider", version.ref = "shizuku" }
 slf4j-android = { group = "org.slf4j", name = "slf4j-android", version.ref = "slf4j" }
-spake2-android = { module = "com.github.MuntashirAkon.spake2-java:spake2-android", version.ref = "spake2Android" }
+spake2-android = { module = "com.github.Mahmud0808.spake2-java:spake2-android", version.ref = "spake2Android" }
 sun-security-android = { module = "com.github.MuntashirAkon:sun-security-android", version.ref = "sunSecurityAndroid" }
 shapeindicators = { group = "io.github.dp-hridayan", name = "shapeindicators", version.ref = "shapeindicators" }

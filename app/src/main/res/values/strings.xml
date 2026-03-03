@@ -20,7 +20,8 @@
     <string name="app_crashed">App has crashed</string>
     <!-- App name shown on the launcher and within the application -->
     <string name="app_name" translatable="false">EasyUserSwitcher</string>
-    <!-- Short tagline describing the purpose of this app -->
+    <!-- Short tagline describing the purpose of this app. This modified version of
+         aShell You focuses on simple multi‑user switching rather than generic ADB access. -->
     <string name="app_tagline">Simple user switcher</string>
     <string name="apply_to_all">Apply to all (%1$d remaining)</string>
     <string name="auto_update">Auto update</string>
@@ -201,8 +202,6 @@
     <!-- Easy User Switcher -->
     <string name="user_switcher">User Switcher</string>
     <string name="user_switcher_summary">Switch between Android user profiles via Wi‑Fi ADB</string>
-    <!-- Shown when the user switcher card is tapped without an active ADB connection -->
-    <string name="user_switcher_requires_connection">Please establish an ADB connection (Local, Wireless or OTG) before using the user switcher.</string>
     <string name="field_cannot_be_blank">Field cannot be blank</string>
     <string name="file">File</string>
     <string name="file_actions">File actions</string>

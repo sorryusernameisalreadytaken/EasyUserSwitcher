@@ -422,33 +422,11 @@ fun UserSwitcherCard(
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
-    val context = LocalContext.current
-    // Check whether an ADB connection has been established via the global
-    // AdbConnectionManager. When no connection exists the card is dimmed
-    // and clicking it will show a toast instead of navigating.
-    val connected = try {
-        `in`.hridayan.ashell.shell.common.data.adb.AdbConnectionManager.getInstance(context).isConnected
-    } catch (_: Exception) {
-        false
-    }
-    // Reduce opacity when disabled
-    val cardAlpha = if (connected) 1f else 0.5f
-
     NavigationCard(
         title = stringResource(R.string.user_switcher),
         description = stringResource(R.string.user_switcher_summary),
         icon = painterResource(R.drawable.ic_user_switcher),
-        modifier = modifier.alpha(cardAlpha),
-        onClick = {
-            if (connected) {
-                onClick()
-            } else {
-                // Inform the user that an ADB connection is required
-                makeToast(
-                    context,
-                    context.getString(R.string.user_switcher_requires_connection)
-                )
-            }
-        }
+        modifier = modifier,
+        onClick = onClick
     )
 }

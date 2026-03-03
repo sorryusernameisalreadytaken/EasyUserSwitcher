@@ -18,7 +18,7 @@
     <string name="already_latest_version">Du nutzt die neueste Version</string>
     <string name="app">App</string>
     <string name="app_crashed">App ist Abgestürzt</string>
-    <!-- Tagline in German reflecting the modified purpose -->
+    <!-- Kurzbeschreibung der modifizierten App, die sich auf das einfache Wechseln zwischen Benutzerprofilen konzentriert -->
     <string name="app_tagline">Einfacher Benutzerwechsel</string>
     <string name="apply_to_all">Auf alle anwenden (%1$d verbleibend)</string>
     <string name="auto_update">Auto-Update</string>

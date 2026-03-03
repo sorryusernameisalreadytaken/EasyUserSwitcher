@@ -11,13 +11,9 @@ plugins {
 }
 
 android {
-    // Keep the namespace aligned with the original package (`in.hridayan.ashell`) so that
-    // generated classes like R and BuildConfig remain in the same package.  Although the
-    // applicationId is set to `eu.eus`, using the original namespace avoids unresolved
-    // references throughout the codebase.  The applicationId controls the unique
-    // identifier installed on devices and in app stores, while the namespace defines
-    // where Android will generate R and BuildConfig classes.
-    namespace = "in.hridayan.ashell"
+    // Set a unique namespace for the EasyUserSwitcher app. This should match the
+    // applicationId defined below.
+    namespace = "eu.eus"
     compileSdk = 36
 
     defaultConfig {
