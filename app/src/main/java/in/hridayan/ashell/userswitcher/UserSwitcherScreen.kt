@@ -1,6 +1,7 @@
 package `in`.hridayan.ashell.userswitcher
 
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -19,10 +20,48 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.text.font.FontWeight
+import kotlin.math.abs
 import `in`.hridayan.ashell.R
 import `in`.hridayan.ashell.userswitcher.UserSwitchShortcutActivity
 import android.content.Intent
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+
+// A palette of colours used to visually distinguish different user profiles.  The
+// colours are selected from the Material design palette and cycle when the
+// number of users exceeds the palette length.  This deterministic mapping
+// ensures that a given user ID always maps to the same colour.
+private val userColors: List<Color> = listOf(
+    Color(0xFFE57373), // Red
+    Color(0xFFF06292), // Pink
+    Color(0xFFBA68C8), // Purple
+    Color(0xFF9575CD), // Deep Purple
+    Color(0xFF7986CB), // Indigo
+    Color(0xFF64B5F6), // Blue
+    Color(0xFF4FC3F7), // Light Blue
+    Color(0xFF4DD0E1), // Cyan
+    Color(0xFF4DB6AC), // Teal
+    Color(0xFF81C784), // Green
+    Color(0xFFAED581), // Light Green
+    Color(0xFFFFD54F), // Amber
+    Color(0xFFFFB74D), // Orange
+    Color(0xFFFF8A65), // Deep Orange
+    Color(0xFFD4E157)  // Lime
+)
+
+/**
+ * Determine a colour for the supplied user ID.  The ID is mapped to an
+ * index in the colour palette using its absolute value to support both
+ * positive and negative IDs (although user IDs are typically non‑negative).
+ */
+fun colorForUser(id: Int): Color {
+    val index = abs(id) % userColors.size
+    return userColors[index]
+}
 
 /**
  * A Compose screen that lists available Android user profiles and allows
@@ -100,14 +139,14 @@ fun UserSwitcherScreen() {
                             // Skip owner (0) for dynamic shortcuts
                             if (id == 0) return@mapNotNull null
                             val shortcutId = "eus_user_$id"
-                            // Build the resource name for numbered user icons.  Pad
-                            // single‑digit IDs with a leading 0 so that ids 1..9
-                            // resolve to ic_user_switcher_01 through
-                            // ic_user_switcher_09.  This matches the resource
-                            // naming convention used for the 32 numbered icons.
-                            val iconName = "ic_user_switcher_%02d".format(id)
-                            val resId = context.resources.getIdentifier(iconName, "drawable", context.packageName)
-                            val iconRes = if (resId != 0) resId else R.drawable.ic_user_switcher
+                            // Determine a colour for this user and tint the base icon accordingly.
+                            val colour = colorForUser(id)
+                            val icon = android.graphics.drawable.Icon.createWithResource(context, R.drawable.ic_user_switcher)
+                            try {
+                                icon.setTint(colour.toArgb())
+                            } catch (_: Throwable) {
+                                // If setTint is unavailable on this platform, the icon will remain uncoloured.
+                            }
                             val intent = Intent(context, UserSwitchShortcutActivity::class.java).apply {
                                 action = Intent.ACTION_VIEW
                                 putExtra("user_id", id)
@@ -116,7 +155,7 @@ fun UserSwitcherScreen() {
                             android.content.pm.ShortcutInfo.Builder(context, shortcutId)
                                 .setShortLabel(name)
                                 .setLongLabel("Switch to $name")
-                                .setIcon(android.graphics.drawable.Icon.createWithResource(context, iconRes))
+                                .setIcon(icon)
                                 .setIntent(intent)
                                 .build()
                         }
@@ -145,6 +184,10 @@ fun UserSwitcherScreen() {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        // Colour the background of each user row using a translucent
+                        // version of the assigned colour.  This helps users mentally
+                        // map colours to profiles without overwhelming the UI.
+                        .background(colorForUser(id).copy(alpha = 0.15f))
                         .combinedClickable(
                             onClick = {
                                 // Only attempt switching if connected
@@ -173,16 +216,18 @@ fun UserSwitcherScreen() {
                                 if (id == 0) return@combinedClickable
                                 val shortcutManager = context.getSystemService(android.content.pm.ShortcutManager::class.java)
                                 if (shortcutManager != null && shortcutManager.isRequestPinShortcutSupported) {
-                                    // Use zero‑padded resource names for the numbered user icons so
-                                    // that ids 1..9 map to ic_user_switcher_01..09.  If the
-                                    // resource is missing we fall back to the generic user icon.
-                                    val iconName = "ic_user_switcher_%02d".format(id)
-                                    val resId = context.resources.getIdentifier(iconName, "drawable", context.packageName)
-                                    val iconRes = if (resId != 0) resId else R.drawable.ic_user_switcher
-                                    val shortcut = android.content.pm.ShortcutInfo.Builder(context, "eus_pin_user_$id")
+                                    // Tint the base user switcher icon with a deterministic colour.
+                                    val colour = colorForUser(id)
+                                    val baseIcon = android.graphics.drawable.Icon.createWithResource(context, R.drawable.ic_user_switcher)
+                                    try {
+                                        baseIcon.setTint(colour.toArgb())
+                                    } catch (_: Throwable) {
+                                        // ignore tint failures on older platforms
+                                    }
+                                    val shortcut = android.content.pm.ShortcutInfo.Builder(context, "eus_pin_user_${'$'}id")
                                         .setShortLabel(name)
-                                        .setLongLabel("Switch to $name")
-                                        .setIcon(android.graphics.drawable.Icon.createWithResource(context, iconRes))
+                                        .setLongLabel("Switch to ${'$'}name")
+                                        .setIcon(baseIcon)
                                         .setIntent(
                                             Intent(context, UserSwitchShortcutActivity::class.java).apply {
                                                 action = Intent.ACTION_VIEW
@@ -204,8 +249,31 @@ fun UserSwitcherScreen() {
                             append(" (" + id + ")")
                             if (running) append(" – running")
                         },
-                        style = MaterialTheme.typography.bodyLarge
+                        // Bold the text of running users to make them stand out
+                        style = MaterialTheme.typography.bodyLarge.copy(
+                            fontWeight = if (running) FontWeight.Bold else FontWeight.Normal
+                        )
                     )
+                }
+            }
+        }
+
+        // Periodically refresh the users list while this screen is active.  This
+        // ensures the running state is updated in near‑real time and that
+        // newly created or removed profiles show up without requiring manual
+        // reloads.  The effect loops every few seconds as long as the
+        // coroutine is active and the ADB connection is alive.  We avoid
+        // updating the status text here to prevent flickering; only the
+        // list itself is refreshed.
+        LaunchedEffect(Unit) {
+            while (isActive) {
+                delay(5_000)
+                if (adbHelper.isConnected()) {
+                    val output = adbHelper.executeShell("pm list users")
+                    if (output != null) {
+                        val parsed = adbHelper.parseUsers(output)
+                        users = parsed
+                    }
                 }
             }
         }

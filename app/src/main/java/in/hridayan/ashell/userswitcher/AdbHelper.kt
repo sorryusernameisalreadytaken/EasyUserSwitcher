@@ -143,47 +143,50 @@ class AdbHelper(private val context: Context) {
     }
 
     /**
-     * Switch to a target user and automatically return to the main user once
-     * the device becomes idle. The command runs entirely on the device and
-     * exits when the switch back is complete. The main user defaults to 0.
+     * Switch to a target user and, if requested, automatically return to the main
+     * user once the device display has turned off.  When `mainUser` is equal
+     * to `targetUser`, no automatic return is scheduled.  The ADB commands
+     * executed here mirror a manual shell workflow: after switching to the
+     * target user the helper waits for the UI to become inactive (i.e. the
+     * screen turns off) by polling `dumpsys input` for the `Interactive = true`
+     * flag.  When the flag flips to false, the script sleeps briefly and
+     * switches back to the owner (user 0 by default).  Any non‑empty
+     * output from the switch command is returned to the caller to signal an
+     * error.
      */
     suspend fun switchUser(targetUser: Int, mainUser: Int = 0): String? = withContext(Dispatchers.IO) {
         if (!isConnected()) return@withContext null
-        // Build a simple command to switch to the target user. We'll capture
-        // any output for error reporting. If this succeeds, we optionally
-        // schedule a return to the main user based on idle detection.
+        // Perform the user switch.  We capture any immediate output; a
+        // successful switch usually returns nothing.  If the switch fails
+        // (non‑empty output) we immediately propagate the result.
         val switchCommand = "am switch-user $targetUser"
         val result = executeShell(switchCommand)
-        // If the command returned anything it may indicate an error. The
-        // expected successful invocation typically returns no output.
         if (result?.isNotBlank() == true) {
             return@withContext result
         }
-        // Schedule the auto-return to the main user using a background script.
-        // We don't need to wait for this to finish, but we still append our
-        // marker to ensure the shell command terminates. The script loops
-        // until the display turns off and then performs the switch back.
-        val script = """
-            TARGET_USER=$targetUser
-            MAIN_USER=$mainUser
-            # Wait until the current user matches the target user to ensure the
-            # initial switch is complete. Bail out if switching fails.
-            for i in 1 2 3 4 5; do
-                CURRENT=$(am get-current-user | tr -dc '0-9')
-                [ "${'$'}CURRENT" = "${'$'}TARGET_USER" ] && break
-                sleep 1
-            done
-            # Poll until the display turns off, then switch back to main user
-            while true; do
-                CURRENT=$(am get-current-user | tr -dc '0-9')
-                [ "${'$'}CURRENT" != "${'$'}TARGET_USER" ] && exit 0
-                if dumpsys power | grep -q 'state=OFF'; then break; fi
-                sleep 5
-            done
-            am switch-user ${'$'}MAIN_USER
-        """.trimIndent().replace("\n", "; ")
-        // Fire and forget the background script. We ignore its output.
-        executeShell(script)
+        // If the target user differs from the main user, schedule an automatic
+        // switch back once the device becomes inactive.  We use dumpsys input
+        // rather than dumpsys power because the latter sometimes reports a
+        // screen‑off state even while the UI is still interactive.  The loop
+        // polls the interactive state every few seconds, then waits two
+        // additional seconds before returning to the main user.  Using
+        // semicolons to join lines avoids spawning an interactive shell.
+        if (targetUser != mainUser) {
+            val script = """
+                # Poll interactive state until it is no longer true
+                while dumpsys input | grep -q "Interactive = true"; do
+                    sleep 3
+                done
+                # Give the system a moment to fully go idle
+                sleep 2
+                # Switch back to the main/owner user
+                am switch-user $mainUser
+            """.trimIndent().replace("\n", "; ")
+            // Launch the background job and ignore any output.  We don't need
+            // to await its completion since the user switch happens on the
+            // device independently.
+            executeShell(script)
+        }
         return@withContext null
     }
 
