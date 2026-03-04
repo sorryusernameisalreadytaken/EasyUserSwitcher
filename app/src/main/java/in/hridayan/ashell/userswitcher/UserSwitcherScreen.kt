@@ -8,6 +8,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -22,18 +27,31 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.ui.graphics.asImageBitmap
 import kotlin.math.abs
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.Icon
+import android.graphics.BitmapFactory
+import android.net.Uri
 import androidx.core.content.ContextCompat
 import `in`.hridayan.ashell.R
+import `in`.hridayan.ashell.userswitcher.CustomIconManager
 import `in`.hridayan.ashell.userswitcher.UserSwitchShortcutActivity
+import `in`.hridayan.ashell.userswitcher.SettingsRepository
 import android.content.Intent
+import android.content.pm.ShortcutInfo
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.foundation.Image
 
 /**
  * Load a coloured launcher icon for the given user ID.  This helper prefers
@@ -49,6 +67,13 @@ import kotlinx.coroutines.launch
 private fun loadUserShortcutIcon(context: Context, id: Int): Icon {
     val resources = context.resources
     val packageName = context.packageName
+    // If a custom icon has been saved for this user, load it first.  Custom
+    // icons override the bundled icons and preserve user‑chosen imagery.  If
+    // none exists, fall back to numbered and colour icons.
+    val customBitmap = CustomIconManager.loadCustomIcon(context, id)
+    if (customBitmap != null) {
+        return Icon.createWithBitmap(customBitmap)
+    }
     // Prefer a numbered icon (ic_user_switcher_<id>) when the ID is within our
     // bundle.  These resources encode both a coloured background and the user
     // number.  Resource identifiers return 0 when the resource is missing.
@@ -139,6 +164,63 @@ fun UserSwitcherScreen() {
     var status by rememberSaveable { mutableStateOf("") }
     var users by rememberSaveable { mutableStateOf(listOf<Triple<Int, String, Boolean>>()) }
 
+    // Dialog state for settings.  When true, a modal dialog is shown to
+    // configure the post‑switch command.  We hold the pending command
+    // separately to avoid writing to preferences until the user confirms.
+    var showSettingsDialog by remember { mutableStateOf(false) }
+    var pendingUserId by remember { mutableStateOf<Int?>(null) }
+    var pendingUserName by remember { mutableStateOf<String?>(null) }
+    // Launcher to pick images for custom icons.  When a user selects an
+    // image the callback crops and scales it, saves it to internal
+    // storage and requests a pinned shortcut with the resulting bitmap.
+    val pickImageLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        val uid = pendingUserId
+        val uname = pendingUserName
+        if (uri != null && uid != null && uname != null) {
+            try {
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    val original = BitmapFactory.decodeStream(input)
+                    if (original != null) {
+                        val size = kotlin.math.min(original.width, original.height)
+                        val left = (original.width - size) / 2
+                        val top = (original.height - size) / 2
+                        // Crop to a square
+                        val square = Bitmap.createBitmap(original, left, top, size, size)
+                        // Scale to a reasonable launcher icon size (256×256 px)
+                        val finalBitmap = Bitmap.createScaledBitmap(square, 256, 256, true)
+                        // Persist the icon and update UI
+                        CustomIconManager.saveCustomIcon(context, uid, finalBitmap)
+                        // Trigger recomposition by assigning a new list
+                        users = users.toList()
+                        // Build and request the pinned shortcut
+                        val shortcutManager = context.getSystemService(android.content.pm.ShortcutManager::class.java)
+                        if (shortcutManager != null && shortcutManager.isRequestPinShortcutSupported) {
+                            val icon = Icon.createWithBitmap(finalBitmap)
+                            val intent = Intent(context, UserSwitchShortcutActivity::class.java).apply {
+                                action = Intent.ACTION_VIEW
+                                putExtra("user_id", uid)
+                                putExtra("user_name", uname)
+                            }
+                            val shortcut = ShortcutInfo.Builder(context, "eus_pin_user_${'$'}uid")
+                                .setShortLabel(uname)
+                                .setLongLabel("Switch to ${'$'}uname")
+                                .setIcon(icon)
+                                .setIntent(intent)
+                                .build()
+                            shortcutManager.requestPinShortcut(shortcut, null)
+                        }
+                    }
+                }
+            } catch (_: Exception) {
+                // Ignore errors during image decoding or cropping
+            }
+        }
+        pendingUserId = null
+        pendingUserName = null
+    }
+
     // Helper to update the status text
     fun updateStatus(msg: String) {
         status = msg
@@ -157,12 +239,65 @@ fun UserSwitcherScreen() {
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        Text(
-            text = "Easy User Switcher",
-            style = MaterialTheme.typography.titleLarge
-        )
+        // Header row with title and a settings button.  The settings button
+        // opens a dialog where the user can configure a custom ADB command.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Easy User Switcher",
+                style = MaterialTheme.typography.titleLarge
+            )
+            IconButton(onClick = { showSettingsDialog = true }) {
+                Icon(
+                    imageVector = Icons.Filled.Settings,
+                    contentDescription = "Settings"
+                )
+            }
+        }
 
         Spacer(modifier = Modifier.height(16.dp))
+
+        // Show settings dialog when requested.  The dialog allows the user to
+        // specify a custom ADB command to run after switching.  Use {id} as
+        // a placeholder for the user ID.  The command is saved to
+        // SharedPreferences on confirmation.
+        if (showSettingsDialog) {
+            var commandText by remember { mutableStateOf(SettingsRepository.getCustomCommand(context)) }
+            AlertDialog(
+                onDismissRequest = { showSettingsDialog = false },
+                title = { Text("Benutzerdefinierter ADB-Befehl") },
+                text = {
+                    Column {
+                        Text("Dieser Befehl wird nach dem Benutzerwechsel ausgeführt. Verwenden Sie {id} als Platzhalter für die User‑ID.")
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = commandText,
+                            onValueChange = { commandText = it },
+                            label = { Text("ADB-Befehl") },
+                            singleLine = false,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(onClick = {
+                        SettingsRepository.setCustomCommand(context, commandText)
+                        showSettingsDialog = false
+                    }) {
+                        Text("Speichern")
+                    }
+                },
+                dismissButton = {
+                    OutlinedButton(onClick = { showSettingsDialog = false }) {
+                        Text("Abbrechen")
+                    }
+                }
+            )
+        }
 
         val isConnected = adbHelper.isConnected()
         // Show a hint if not connected
@@ -273,38 +408,41 @@ fun UserSwitcherScreen() {
                                 }
                             },
                             onLongClick = {
-                                // Request a pinned shortcut for this user (except owner)
+                                // When long‑pressing a profile (except the owner), prompt the user
+                                // to select an image to use as the launcher shortcut icon.  The
+                                // selected image is cropped, scaled and persisted, and a pinned
+                                // shortcut is then created using that image.  Requesting the
+                                // image every time avoids having to build a separate icon
+                                // management UI.
                                 if (id == 0) return@combinedClickable
-                                val shortcutManager = context.getSystemService(android.content.pm.ShortcutManager::class.java)
-                                if (shortcutManager != null && shortcutManager.isRequestPinShortcutSupported) {
-                                // On Android 13+ tinted icons for pinned shortcuts are prohibited and
-                                // cause IllegalArgumentException.  Prefer numbered icons for pinned
-                                // shortcuts as well (see dynamic shortcut logic).  These icons include
-                                // the user ID overlay and a coloured background.  Fallback to the
-                                // colour‑only set when no numbered resource exists.
-                                    val baseIcon = loadUserShortcutIcon(context, id)
-                                    val shortcut = android.content.pm.ShortcutInfo.Builder(
-                                        context,
-                                        "eus_pin_user_${'$'}id"
-                                    )
-                                        .setShortLabel(name)
-                                        .setLongLabel("Switch to ${'$'}name")
-                                        .setIcon(baseIcon)
-                                        .setIntent(
-                                            Intent(context, UserSwitchShortcutActivity::class.java).apply {
-                                                action = Intent.ACTION_VIEW
-                                                putExtra("user_id", id)
-                                                putExtra("user_name", name)
-                                            }
-                                        )
-                                        .build()
-                                    shortcutManager.requestPinShortcut(shortcut, null)
-                                }
+                                pendingUserId = id
+                                pendingUserName = name
+                                pickImageLauncher.launch("image/*")
                             }
                         )
                         .padding(vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // Display a custom icon if one exists; otherwise show a generic person icon.
+                    val customIconBitmap = CustomIconManager.loadCustomIcon(context, id)
+                    if (customIconBitmap != null) {
+                        Image(
+                            bitmap = customIconBitmap.asImageBitmap(),
+                            contentDescription = "Icon for ${'$'}name",
+                            modifier = Modifier
+                                .size(24.dp)
+                                .padding(end = 8.dp)
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Filled.Person,
+                            contentDescription = "User",
+                            modifier = Modifier
+                                .size(24.dp)
+                                .padding(end = 8.dp),
+                            tint = Color.Unspecified
+                        )
+                    }
                     Text(
                         text = buildString {
                             append(name)

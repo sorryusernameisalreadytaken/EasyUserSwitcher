@@ -8,6 +8,7 @@ import android.util.Log
 // underlying connection as the rest of the app (local ADB, wireless and OTG
 // connections), we import the global manager from the shell.common package.
 import `in`.hridayan.ashell.shell.common.data.adb.AdbConnectionManager
+import `in`.hridayan.ashell.userswitcher.SettingsRepository
 import io.github.muntashirakon.adb.AbsAdbConnectionManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -143,48 +144,50 @@ class AdbHelper(private val context: Context) {
     }
 
     /**
-     * Switch to a target user and, if requested, schedule an automatic return
-     * to the main user once the device display becomes inactive.  The
-     * automatic return logic mirrors the manual command shown in the
-     * project documentation: it continuously polls `dumpsys input` for the
-     * `Interactive = true` flag and, when the flag flips to false (i.e. the
-     * screen has turned off), waits briefly before issuing `am switch-user
-     * mainUser` to return to the owner.  To avoid blocking the caller on
-     * potentially long‑running polling, the return logic is run in a
-     * background subshell using the ampersand operator.  This ensures that
-     * the adb stream returns immediately while the polling continues on the
-     * device.  Any non‑empty output from the initial switch command is
-     * returned to the caller to signal an error.
+     * Switch to a target user.  The immediate switch is performed first
+     * using `am switch-user <target>`.  If the target differs from the
+     * owner (`mainUser`), a post‑switch script is scheduled to run in
+     * the background.  The post‑switch behaviour is determined as follows:
+     *
+     *  * If the user has configured a custom command via
+     *    [SettingsRepository.setCustomCommand], that command is executed
+     *    with any `{id}` placeholders replaced by the target user ID.  The
+     *    command runs asynchronously on the device without blocking the
+     *    current ADB stream.
+     *  * Otherwise, a default script polls `dumpsys input` every two
+     *    seconds until the display is no longer interactive, then switches
+     *    back to `mainUser` via `am switch-user`.
+     *
+     * Any output returned by the initial user switch is returned to the
+     * caller so that errors can be surfaced in the UI.  The asynchronous
+     * scripts do not return a value.
      */
     suspend fun switchUser(targetUser: Int, mainUser: Int = 0): String? = withContext(Dispatchers.IO) {
         if (!isConnected()) return@withContext null
-        // Construct a script that performs the user switch and, when
-        // switching to a different user, monitors for display inactivity and
-        // returns to the main user. The logic mirrors the one‑liner used in
-        // the project documentation: we issue `am switch-user` to the
-        // selected profile, poll `dumpsys input` until the device is no
-        // longer interactive and then immediately switch back to the main
-        // user. A small sleep can be inserted after the polling loop to
-        // ensure the lockscreen has had time to appear.  Wrapping the
-        // entire script in parentheses followed by an ampersand allows it
-        // to run asynchronously on the device so the ADB stream returns
-        // immediately.
-        val script = if (targetUser != mainUser) {
-            // Delay between polling iterations (in seconds). Adjust as
-            // needed; shorter delays mean quicker detection when the screen
-            // turns off but increase battery impact. Here we choose 2
-            // seconds for a responsive yet efficient polling.
-            val delay = 2
-            "am switch-user ${'$'}targetUser && while dumpsys input | grep -q \"Interactive = true\"; do sleep ${'$'}delay; done && sleep ${'$'}delay && am switch-user ${'$'}mainUser"
-        } else {
-            "am switch-user ${'$'}targetUser"
+        // Perform the immediate switch.  We capture output to report
+        // potential errors (e.g. unknown user ID).
+        val switchOutput = executeShell("am switch-user ${'$'}targetUser")
+        // Schedule follow‑up actions when switching away from the main user.
+        if (targetUser != mainUser) {
+            val custom = SettingsRepository.getCustomCommand(context).trim()
+            if (custom.isNotEmpty()) {
+                // Substitute placeholder for user ID.  The user can include
+                // shell operators (&&, ||, etc.) as desired.
+                val replaced = custom.replace("{id}", targetUser.toString())
+                val asyncCmd = "(" + replaced + ") &"
+                executeShell(asyncCmd)
+            } else {
+                // Default behaviour: monitor interactive state and return to
+                // owner.  Use a two‑second polling interval for
+                // responsiveness.  We omit an extra sleep after the loop
+                // since `dumpsys input` flips to false only when the screen
+                // turns off.
+                val script = "while dumpsys input | grep -q \"Interactive = true\"; do sleep 2; done && am switch-user ${'$'}mainUser"
+                val asyncCmd = "(" + script + ") &"
+                executeShell(asyncCmd)
+            }
         }
-        val asyncCommand = "(" + script + ") &"
-        executeShell(asyncCommand)
-        // We always return null because the switching is handled in the
-        // background. Any errors during the initial switch will be
-        // propagated via logcat but do not surface here.
-        return@withContext null
+        return@withContext switchOutput
     }
 
     companion object {
