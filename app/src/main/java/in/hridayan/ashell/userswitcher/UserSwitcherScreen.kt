@@ -164,6 +164,14 @@ fun UserSwitcherScreen() {
     var status by rememberSaveable { mutableStateOf("") }
     var users by rememberSaveable { mutableStateOf(listOf<Triple<Int, String, Boolean>>()) }
 
+    // Version counter for custom icons.  Each time a user selects
+    // a new icon the counter is incremented.  Compose will recompute
+    // remembered values that depend on this counter, ensuring that
+    // updated icons are reloaded for individual list items.  We use
+    // rememberSaveable so that the version survives configuration
+    // changes but resets when the screen is recreated.
+    var iconVersion by rememberSaveable { mutableStateOf(0) }
+
     // Dialog state for settings.  When true, a modal dialog is shown to
     // configure the post‑switch command.  We hold the pending command
     // separately to avoid writing to preferences until the user confirms.
@@ -190,10 +198,15 @@ fun UserSwitcherScreen() {
                         val square = Bitmap.createBitmap(original, left, top, size, size)
                         // Scale to a reasonable launcher icon size (256×256 px)
                         val finalBitmap = Bitmap.createScaledBitmap(square, 256, 256, true)
-                        // Persist the icon and update UI
+                        // Persist the icon and update UI.  After saving we bump
+                        // the icon version and rebuild the user list so that
+                        // Compose reloads only the affected entries.  Without
+                        // this, Compose may reuse the same Bitmap for all
+                        // users, causing every row to show the most recently
+                        // selected icon.
                         CustomIconManager.saveCustomIcon(context, uid, finalBitmap)
-                        // Trigger recomposition by assigning a new list
-                        users = users.toList()
+                        iconVersion++
+                        users = users.map { Triple(it.first, it.second, it.third) }
                         // Build and request the pinned shortcut
                         val shortcutManager = context.getSystemService(android.content.pm.ShortcutManager::class.java)
                         if (shortcutManager != null && shortcutManager.isRequestPinShortcutSupported) {
@@ -475,7 +488,15 @@ fun UserSwitcherScreen() {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     // Display a custom icon if one exists; otherwise show a generic person icon.
-                    val customIconBitmap = CustomIconManager.loadCustomIcon(context, id)
+                    // Load a custom icon if one exists.  The icon is
+                    // remembered based on both the user ID and the
+                    // iconVersion counter.  When a new icon is saved, the
+                    // version increments and Compose reloads the bitmap for
+                    // each row individually.  This prevents the same
+                    // Bitmap instance from being reused across all rows.
+                    val customIconBitmap = remember(id, iconVersion) {
+                        CustomIconManager.loadCustomIcon(context, id)
+                    }
                     if (customIconBitmap != null) {
                         Image(
                             bitmap = customIconBitmap.asImageBitmap(),

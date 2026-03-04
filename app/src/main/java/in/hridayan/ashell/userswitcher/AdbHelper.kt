@@ -164,32 +164,33 @@ class AdbHelper(private val context: Context) {
      */
     suspend fun switchUser(targetUser: Int, mainUser: Int = 0): String? = withContext(Dispatchers.IO) {
         if (!isConnected()) return@withContext null
-        // Perform the immediate switch.  We capture output to report
-        // potential errors (e.g. unknown user ID).
-        // Immediately switch to the target user. Embed the integer directly in the command.
-        val switchOutput = executeShell("am switch-user $targetUser")
-        // Schedule follow‑up actions when switching away from the main user.
-        if (targetUser != mainUser) {
-            val custom = SettingsRepository.getCustomCommand(context).trim()
-            if (custom.isNotEmpty()) {
-                // Substitute placeholder for user ID.  The user can include
-                // shell operators (&&, ||, etc.) as desired.
-                val replaced = custom.replace("{id}", targetUser.toString())
-                val asyncCmd = "(" + replaced + ") &"
-                executeShell(asyncCmd)
-            } else {
-                // Default behaviour: monitor interactive state and return to
-                // owner.  Use a two‑second polling interval for
-                // responsiveness.  We omit an extra sleep after the loop
-                // since `dumpsys input` flips to false only when the screen
-                // turns off.
-                val script =
-                    "while dumpsys input | grep -q \"Interactive = true\"; do sleep 2; done && am switch-user $mainUser"
-                val asyncCmd = "(" + script + ") &"
-                executeShell(asyncCmd)
-            }
+        // When switching to the same user as the owner we simply invoke
+        // the switch command and return its output; no asynchronous
+        // post‑switch actions are necessary.
+        if (targetUser == mainUser) {
+            return@withContext executeShell("am switch-user $mainUser")
         }
-        return@withContext switchOutput
+        // Determine the post‑switch script.  If the user has configured a
+        // custom command we substitute the {id} placeholder with the
+        // actual targetUser.  Otherwise we fall back to the default
+        // behaviour of polling dumpsys input until the display is no
+        // longer interactive, then switch back to the owner.
+        val customCmd = SettingsRepository.getCustomCommand(context).trim()
+        val script = if (customCmd.isNotEmpty()) {
+            customCmd.replace("{id}", targetUser.toString())
+        } else {
+            "while dumpsys input | grep -q \"Interactive = true\"; do sleep 2; done && am switch-user $mainUser"
+        }
+        // Build a single shell command that performs the immediate switch
+        // and schedules the post‑switch script to run in the background.
+        // Using `&&` ensures the script only starts if the initial
+        // user switch succeeds.  Wrapping the script in parentheses and
+        // appending `&` runs it asynchronously without blocking the ADB
+        // stream.  Because both parts execute in the same session, the
+        // script is scheduled before the ADB connection potentially drops
+        // as a result of the user switch.
+        val fullCmd = "am switch-user $targetUser && (" + script + ") &"
+        return@withContext executeShell(fullCmd)
     }
 
     companion object {
