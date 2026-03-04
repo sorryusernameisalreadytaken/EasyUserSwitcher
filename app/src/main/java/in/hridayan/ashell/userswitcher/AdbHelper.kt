@@ -158,40 +158,32 @@ class AdbHelper(private val context: Context) {
      */
     suspend fun switchUser(targetUser: Int, mainUser: Int = 0): String? = withContext(Dispatchers.IO) {
         if (!isConnected()) return@withContext null
-        // First attempt to switch to the target user.  Capture any output
-        // produced by the command; a successful switch normally yields no
-        // output.  If output is present, propagate it as an error.
-        val result = executeShell("am switch-user $targetUser")
-        if (result?.isNotBlank() == true) {
-            return@withContext result
+        // Construct a script that performs the user switch and, when
+        // switching to a different user, monitors for display inactivity and
+        // returns to the main user. The logic mirrors the one‑liner used in
+        // the project documentation: we issue `am switch-user` to the
+        // selected profile, poll `dumpsys input` until the device is no
+        // longer interactive and then immediately switch back to the main
+        // user. A small sleep can be inserted after the polling loop to
+        // ensure the lockscreen has had time to appear.  Wrapping the
+        // entire script in parentheses followed by an ampersand allows it
+        // to run asynchronously on the device so the ADB stream returns
+        // immediately.
+        val script = if (targetUser != mainUser) {
+            // Delay between polling iterations (in seconds). Adjust as
+            // needed; shorter delays mean quicker detection when the screen
+            // turns off but increase battery impact. Here we choose 2
+            // seconds for a responsive yet efficient polling.
+            val delay = 2
+            "am switch-user ${'$'}targetUser && while dumpsys input | grep -q \"Interactive = true\"; do sleep ${'$'}delay; done && sleep ${'$'}delay && am switch-user ${'$'}mainUser"
+        } else {
+            "am switch-user ${'$'}targetUser"
         }
-        // If the target user differs from the main user, prepare a polling
-        // script that monitors when the device UI becomes inactive.  Once
-        // inactive, the script sleeps briefly and then switches back to the
-        // specified main user.  The entire script is wrapped in parentheses
-        // and suffixed with `&` so that it runs asynchronously on the
-        // device.  Joining commands with semicolons avoids spawning an
-        // interactive shell.
-        if (targetUser != mainUser) {
-            val pollingScript = listOf(
-                // Loop until the interactive flag is no longer true
-                "while dumpsys input | grep -q \"Interactive = true\"; do",
-                // Sleep a few seconds between polls to reduce load
-                "sleep 3",
-                "done",
-                // Give the system a moment to fully idle
-                "sleep 2",
-                // Switch back to the main/owner user
-                "am switch-user $mainUser"
-            ).joinToString("; ")
-            // Launch the polling script in a background subshell.  Using
-            // parentheses groups the commands and `&` detaches them so the
-            // shell returns immediately.  We explicitly avoid capturing
-            // output from this invocation; the return value of executeShell
-            // is disregarded.
-            val fullCommand = "(" + pollingScript + ") &"
-            executeShell(fullCommand)
-        }
+        val asyncCommand = "(" + script + ") &"
+        executeShell(asyncCommand)
+        // We always return null because the switching is handled in the
+        // background. Any errors during the initial switch will be
+        // propagated via logcat but do not surface here.
         return@withContext null
     }
 

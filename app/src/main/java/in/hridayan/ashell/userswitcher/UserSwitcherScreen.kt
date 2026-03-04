@@ -23,12 +23,66 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import kotlin.math.abs
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.drawable.Icon
+import androidx.core.content.ContextCompat
 import `in`.hridayan.ashell.R
 import `in`.hridayan.ashell.userswitcher.UserSwitchShortcutActivity
 import android.content.Intent
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+
+/**
+ * Load a coloured launcher icon for the given user ID.  This helper prefers
+ * numbered icons (ic_user_switcher_1 .. ic_user_switcher_32) when available.
+ * These icons include both a coloured background and the user ID overlay.  If
+ * the numbered resource is not found or the ID exceeds the bundle, the icon
+ * falls back to one of the 32 colour‑only images (ic_user_switcher_color_01 .. _32) by cycling the ID via modulo.  If neither resource can be resolved,
+ * a generic fallback icon is returned.  When a resource is found it is
+ * converted into a Bitmap and wrapped via [Icon.createWithBitmap] to ensure
+ * that coloured icons are preserved on launchers that restrict tinted
+ * resources (e.g. Android 13 pinned shortcuts).
+ */
+private fun loadUserShortcutIcon(context: Context, id: Int): Icon {
+    val resources = context.resources
+    val packageName = context.packageName
+    // Prefer a numbered icon (ic_user_switcher_<id>) when the ID is within our
+    // bundle.  These resources encode both a coloured background and the user
+    // number.  Resource identifiers return 0 when the resource is missing.
+    val numberResId = if (id in 1..32) {
+        val name = "ic_user_switcher_${'$'}id"
+        resources.getIdentifier(name, "drawable", packageName)
+    } else 0
+    // If no numbered resource exists, choose a colour‑only icon.  We cycle the
+    // ID through 1..32 so that each user consistently maps to one of the
+    // prepared assets.  The modulo arithmetic is adjusted to handle the
+    // boundary case where id is a multiple of 32 (e.g. 32 → 32 rather than 1).
+    val iconResId = if (numberResId != 0) {
+        numberResId
+    } else {
+        // ((id - 1) % 32) yields 0‑31; adding 32 before modulo ensures
+        // non‑negative results for negative IDs.
+        val idx = (((id - 1) % 32) + 32) % 32 + 1
+        val fallbackName = String.format("ic_user_switcher_color_%02d", idx)
+        resources.getIdentifier(fallbackName, "drawable", packageName)
+    }
+    if (iconResId != 0) {
+        val drawable = ContextCompat.getDrawable(context, iconResId)
+        if (drawable != null) {
+            val width = if (drawable.intrinsicWidth > 0) drawable.intrinsicWidth else 1
+            val height = if (drawable.intrinsicHeight > 0) drawable.intrinsicHeight else 1
+            val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bitmap)
+            drawable.setBounds(0, 0, width, height)
+            drawable.draw(canvas)
+            return Icon.createWithBitmap(bitmap)
+        }
+    }
+    return Icon.createWithResource(context, `in`.hridayan.ashell.R.drawable.ic_user_switcher)
+}
 
 // A palette of colours used to visually distinguish different user profiles.  The
 // colours are selected from the Material design palette and cycle when the
@@ -152,22 +206,7 @@ fun UserSwitcherScreen() {
                             // both a coloured background and the user ID overlay. Fall back to one of the
                             // 32 colour‑only icons by cycling the user ID via modulo when the numbered
                             // resource isn't found or the ID exceeds our bundle.
-                            val numberIconName = if (id in 1..32) "ic_user_switcher_${'$'}id" else null
-                            val numberIconResId = numberIconName?.let { resName ->
-                                context.resources.getIdentifier(resName, "drawable", context.packageName)
-                            } ?: 0
-                            val icon = if (numberIconResId != 0) {
-                                android.graphics.drawable.Icon.createWithResource(context, numberIconResId)
-                            } else {
-                                val fallbackIndex = (abs(id) % 32) + 1
-                                val fallbackName = String.format("ic_user_switcher_color_%02d", fallbackIndex)
-                                val fallbackResId = context.resources.getIdentifier(fallbackName, "drawable", context.packageName)
-                                if (fallbackResId != 0) {
-                                    android.graphics.drawable.Icon.createWithResource(context, fallbackResId)
-                                } else {
-                                    android.graphics.drawable.Icon.createWithResource(context, R.drawable.ic_user_switcher)
-                                }
-                            }
+                            val icon = loadUserShortcutIcon(context, id)
                             val intent = Intent(context, UserSwitchShortcutActivity::class.java).apply {
                                 action = Intent.ACTION_VIEW
                                 putExtra("user_id", id)
@@ -243,22 +282,7 @@ fun UserSwitcherScreen() {
                                 // shortcuts as well (see dynamic shortcut logic).  These icons include
                                 // the user ID overlay and a coloured background.  Fallback to the
                                 // colour‑only set when no numbered resource exists.
-                                    val numberIconName = if (id in 1..32) "ic_user_switcher_${'$'}id" else null
-                                    val numberIconResId = numberIconName?.let { resName ->
-                                        context.resources.getIdentifier(resName, "drawable", context.packageName)
-                                    } ?: 0
-                                    val baseIcon = if (numberIconResId != 0) {
-                                        android.graphics.drawable.Icon.createWithResource(context, numberIconResId)
-                                    } else {
-                                        val idx = (abs(id) % 32) + 1
-                                        val fallbackName = String.format("ic_user_switcher_color_%02d", idx)
-                                        val fallbackResId = context.resources.getIdentifier(fallbackName, "drawable", context.packageName)
-                                        if (fallbackResId != 0) {
-                                            android.graphics.drawable.Icon.createWithResource(context, fallbackResId)
-                                        } else {
-                                            android.graphics.drawable.Icon.createWithResource(context, R.drawable.ic_user_switcher)
-                                        }
-                                    }
+                                    val baseIcon = loadUserShortcutIcon(context, id)
                                     val shortcut = android.content.pm.ShortcutInfo.Builder(
                                         context,
                                         "eus_pin_user_${'$'}id"
