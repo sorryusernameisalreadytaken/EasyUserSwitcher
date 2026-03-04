@@ -21,7 +21,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.font.FontWeight
 import kotlin.math.abs
 import `in`.hridayan.ashell.R
@@ -139,14 +138,22 @@ fun UserSwitcherScreen() {
                             // Skip owner (0) for dynamic shortcuts
                             if (id == 0) return@mapNotNull null
                             val shortcutId = "eus_user_$id"
-                            // Determine a colour for this user and tint the base icon accordingly.
-                            val colour = colorForUser(id)
-                            val icon = android.graphics.drawable.Icon.createWithResource(context, R.drawable.ic_user_switcher)
-                            try {
-                                icon.setTint(colour.toArgb())
-                            } catch (_: Throwable) {
-                                // If setTint is unavailable on this platform, the icon will remain uncoloured.
+
+                            // Use one of the bundled, pre‑colored icons for shortcuts.
+                            // IMPORTANT: Android (esp. 13+) rejects ShortcutInfo icons that have
+                            // a runtime tint applied (IllegalArgumentException: "Icons with tints are not supported").
+                            // Therefore we ship 32 separate drawable PNGs:
+                            //   ic_user_switcher_color_01 .. ic_user_switcher_color_32
+                            // and deterministically map user IDs to one of them.
+                            val iconIndex = (abs(id) % 32) + 1
+                            val iconName = String.format("ic_user_switcher_color_%02d", iconIndex)
+                            val iconResId = context.resources.getIdentifier(iconName, "drawable", context.packageName)
+                            val icon = if (iconResId != 0) {
+                                android.graphics.drawable.Icon.createWithResource(context, iconResId)
+                            } else {
+                                android.graphics.drawable.Icon.createWithResource(context, R.drawable.ic_user_switcher)
                             }
+
                             val intent = Intent(context, UserSwitchShortcutActivity::class.java).apply {
                                 action = Intent.ACTION_VIEW
                                 putExtra("user_id", id)
@@ -159,6 +166,7 @@ fun UserSwitcherScreen() {
                                 .setIntent(intent)
                                 .build()
                         }
+                        // Replace all existing dynamic shortcuts with our updated list (max 4).
                         shortcutManager.dynamicShortcuts = dynamicShortcuts.take(4)
                         }
                         updateStatus("${parsed.size} users loaded")
@@ -216,15 +224,23 @@ fun UserSwitcherScreen() {
                                 if (id == 0) return@combinedClickable
                                 val shortcutManager = context.getSystemService(android.content.pm.ShortcutManager::class.java)
                                 if (shortcutManager != null && shortcutManager.isRequestPinShortcutSupported) {
-                                    // Tint the base user switcher icon with a deterministic colour.
-                                    val colour = colorForUser(id)
-                                    val baseIcon = android.graphics.drawable.Icon.createWithResource(context, R.drawable.ic_user_switcher)
-                                    try {
-                                        baseIcon.setTint(colour.toArgb())
-                                    } catch (_: Throwable) {
-                                        // ignore tint failures on older platforms
+                                // On Android 13+ tinted icons for pinned shortcuts are prohibited and
+                                // cause IllegalArgumentException.  Use the untinted base icon to
+                                // create a pinned shortcut.  Colour cues are still available in
+                                // the in‑app list view.
+                                    // Use pre‑colored icons for pinned shortcuts as well (no runtime tint).
+                                    val iconIndex = (abs(id) % 32) + 1
+                                    val iconName = String.format("ic_user_switcher_color_%02d", iconIndex)
+                                    val iconResId = context.resources.getIdentifier(iconName, "drawable", context.packageName)
+                                    val baseIcon = if (iconResId != 0) {
+                                        android.graphics.drawable.Icon.createWithResource(context, iconResId)
+                                    } else {
+                                        android.graphics.drawable.Icon.createWithResource(context, R.drawable.ic_user_switcher)
                                     }
-                                    val shortcut = android.content.pm.ShortcutInfo.Builder(context, "eus_pin_user_${'$'}id")
+                                    val shortcut = android.content.pm.ShortcutInfo.Builder(
+                                        context,
+                                        "eus_pin_user_${'$'}id"
+                                    )
                                         .setShortLabel(name)
                                         .setLongLabel("Switch to ${'$'}name")
                                         .setIcon(baseIcon)
