@@ -100,7 +100,12 @@ fun UserSwitcherScreen() {
                             // Skip owner (0) for dynamic shortcuts
                             if (id == 0) return@mapNotNull null
                             val shortcutId = "eus_user_$id"
-                            val iconName = "ic_user_switcher_$id"
+                            // Build the resource name for numbered user icons.  Pad
+                            // single‑digit IDs with a leading 0 so that ids 1..9
+                            // resolve to ic_user_switcher_01 through
+                            // ic_user_switcher_09.  This matches the resource
+                            // naming convention used for the 32 numbered icons.
+                            val iconName = "ic_user_switcher_%02d".format(id)
                             val resId = context.resources.getIdentifier(iconName, "drawable", context.packageName)
                             val iconRes = if (resId != 0) resId else R.drawable.ic_user_switcher
                             val intent = Intent(context, UserSwitchShortcutActivity::class.java).apply {
@@ -168,7 +173,10 @@ fun UserSwitcherScreen() {
                                 if (id == 0) return@combinedClickable
                                 val shortcutManager = context.getSystemService(android.content.pm.ShortcutManager::class.java)
                                 if (shortcutManager != null && shortcutManager.isRequestPinShortcutSupported) {
-                                    val iconName = "ic_user_switcher_$id"
+                                    // Use zero‑padded resource names for the numbered user icons so
+                                    // that ids 1..9 map to ic_user_switcher_01..09.  If the
+                                    // resource is missing we fall back to the generic user icon.
+                                    val iconName = "ic_user_switcher_%02d".format(id)
                                     val resId = context.resources.getIdentifier(iconName, "drawable", context.packageName)
                                     val iconRes = if (resId != 0) resId else R.drawable.ic_user_switcher
                                     val shortcut = android.content.pm.ShortcutInfo.Builder(context, "eus_pin_user_$id")

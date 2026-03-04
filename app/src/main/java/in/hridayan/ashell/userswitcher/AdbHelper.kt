@@ -2,7 +2,12 @@ package `in`.hridayan.ashell.userswitcher
 
 import android.content.Context
 import android.util.Log
-import `in`.hridayan.ashell.userswitcher.adb.EasyAdbConnectionManager
+// Use the shared ADB connection manager provided by the rest of the app.
+// The EasyAdbConnectionManager was a private implementation specific to the
+// user‑switcher feature. To ensure the user switcher reuses the same
+// underlying connection as the rest of the app (local ADB, wireless and OTG
+// connections), we import the global manager from the shell.common package.
+import `in`.hridayan.ashell.shell.common.data.adb.AdbConnectionManager
 import io.github.muntashirakon.adb.AbsAdbConnectionManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -17,8 +22,13 @@ import java.io.InputStreamReader
  */
 class AdbHelper(private val context: Context) {
 
+    // Lazily obtain the global ADB connection manager.  Using the
+    // application context ensures we don't accidentally leak an Activity.  The
+    // manager is shared across all components (local ADB, Wi‑Fi, OTG etc.) so
+    // that a single connection is reused instead of each feature opening its
+    // own connection.  See AdbConnectionManager in the shell.common module.
     private val adbManager: AbsAdbConnectionManager by lazy {
-        EasyAdbConnectionManager.getInstance(context)
+        AdbConnectionManager.getInstance(context.applicationContext)
     }
 
     /**
