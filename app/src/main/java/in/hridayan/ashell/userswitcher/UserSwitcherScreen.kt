@@ -239,8 +239,11 @@ fun UserSwitcherScreen() {
     // when the current list is empty to avoid repeatedly reloading on
     // recomposition.  The same sorting and shortcut creation logic used by the
     // reload button is applied here.
-    LaunchedEffect(isConnected) {
-        if (isConnected && users.isEmpty()) {
+    LaunchedEffect(Unit) {
+        // Only perform the initial load once, when no users are currently loaded
+        // and the ADB connection is active.  We query the connection on demand
+        // to avoid relying on an outer scoped variable that may not exist.
+        if (users.isEmpty() && adbHelper.isConnected()) {
             updateStatus("Loading users…")
             val output = adbHelper.executeShell("pm list users")
             if (output == null) {
