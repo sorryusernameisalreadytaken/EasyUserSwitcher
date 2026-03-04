@@ -166,7 +166,8 @@ class AdbHelper(private val context: Context) {
         if (!isConnected()) return@withContext null
         // Perform the immediate switch.  We capture output to report
         // potential errors (e.g. unknown user ID).
-        val switchOutput = executeShell("am switch-user ${'$'}targetUser")
+        // Immediately switch to the target user. Embed the integer directly in the command.
+        val switchOutput = executeShell("am switch-user $targetUser")
         // Schedule follow‑up actions when switching away from the main user.
         if (targetUser != mainUser) {
             val custom = SettingsRepository.getCustomCommand(context).trim()
@@ -182,7 +183,8 @@ class AdbHelper(private val context: Context) {
                 // responsiveness.  We omit an extra sleep after the loop
                 // since `dumpsys input` flips to false only when the screen
                 // turns off.
-                val script = "while dumpsys input | grep -q \"Interactive = true\"; do sleep 2; done && am switch-user ${'$'}mainUser"
+                val script =
+                    "while dumpsys input | grep -q \"Interactive = true\"; do sleep 2; done && am switch-user $mainUser"
                 val asyncCmd = "(" + script + ") &"
                 executeShell(asyncCmd)
             }

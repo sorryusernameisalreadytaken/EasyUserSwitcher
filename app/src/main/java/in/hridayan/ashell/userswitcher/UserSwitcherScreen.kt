@@ -234,30 +234,80 @@ fun UserSwitcherScreen() {
         }
     }
 
-    Column(
+    // Automatically load the user list when the screen is first displayed
+    // and a connection to ADB is available.  We only perform this initial load
+    // when the current list is empty to avoid repeatedly reloading on
+    // recomposition.  The same sorting and shortcut creation logic used by the
+    // reload button is applied here.
+    LaunchedEffect(isConnected) {
+        if (isConnected && users.isEmpty()) {
+            updateStatus("Loading users…")
+            val output = adbHelper.executeShell("pm list users")
+            if (output == null) {
+                updateStatus("Failed to list users")
+            } else {
+                val parsed = adbHelper.parseUsers(output)
+                users = parsed.sortedWith(
+                    compareBy<Triple<Int, String, Boolean>> {
+                        when {
+                            it.first == 0 -> 0
+                            it.third -> 1
+                            else -> 2
+                        }
+                    }.thenBy { it.first }
+                )
+                val shortcutManager = context.getSystemService(android.content.pm.ShortcutManager::class.java)
+                if (shortcutManager != null) {
+                    shortcutManager.removeAllDynamicShortcuts()
+                    val dynamicShortcuts = parsed.mapNotNull { (id, name, _) ->
+                        if (id == 0) return@mapNotNull null
+                        val shortcutId = "eus_user_${'$'}id"
+                        val icon = loadUserShortcutIcon(context, id)
+                        val intent = Intent(context, UserSwitchShortcutActivity::class.java).apply {
+                            action = Intent.ACTION_VIEW
+                            putExtra("user_id", id)
+                            putExtra("user_name", name)
+                        }
+                        android.content.pm.ShortcutInfo.Builder(context, shortcutId)
+                            .setShortLabel(name)
+                            .setLongLabel("Switch to ${'$'}name")
+                            .setIcon(icon)
+                            .setIntent(intent)
+                            .build()
+                    }
+                    shortcutManager.dynamicShortcuts = dynamicShortcuts.take(4)
+                }
+                updateStatus("${parsed.size} users loaded")
+            }
+        }
+    }
+
+    // Wrap the main UI in a Box so that the settings button can be placed
+    // independently of the header.  This helps avoid overlap with notches
+    // or status bars by moving the button to the bottom‑right corner.  The
+    // Column still contains the primary content.
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        // Header row with title and a settings button.  The settings button
-        // opens a dialog where the user can configure a custom ADB command.
-        Row(
+        Column(
             modifier = Modifier
-                .fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+                .fillMaxSize()
         ) {
-            Text(
-                text = "Easy User Switcher",
-                style = MaterialTheme.typography.titleLarge
-            )
-            IconButton(onClick = { showSettingsDialog = true }) {
-                Icon(
-                    imageVector = Icons.Filled.Settings,
-                    contentDescription = "Settings"
+            // Header only displays the title.  The settings button is now
+            // positioned separately at the bottom of the screen.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth(),
+                horizontalArrangement = Arrangement.Start,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Easy User Switcher",
+                    style = MaterialTheme.typography.titleLarge
                 )
             }
-        }
 
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -309,7 +359,7 @@ fun UserSwitcherScreen() {
             )
         }
 
-        // Button to fetch users
+        // Button to fetch or reload users
         Button(
             onClick = {
                 updateStatus("Loading users…")
@@ -330,32 +380,30 @@ fun UserSwitcherScreen() {
                                 }
                             }.thenBy { it.first }
                         )
-                        // Create dynamic shortcuts for up to four users (excluding owner)
                         val shortcutManager = context.getSystemService(android.content.pm.ShortcutManager::class.java)
                         if (shortcutManager != null) {
-                        val dynamicShortcuts = parsed.mapNotNull { (id, name, _) ->
-                            // Skip owner (0) for dynamic shortcuts
-                            if (id == 0) return@mapNotNull null
-                            val shortcutId = "eus_user_${'$'}id"
-                            // Prefer numbered icons (ic_user_switcher_<id>.png) when available. These contain
-                            // both a coloured background and the user ID overlay. Fall back to one of the
-                            // 32 colour‑only icons by cycling the user ID via modulo when the numbered
-                            // resource isn't found or the ID exceeds our bundle.
-                            val icon = loadUserShortcutIcon(context, id)
-                            val intent = Intent(context, UserSwitchShortcutActivity::class.java).apply {
-                                action = Intent.ACTION_VIEW
-                                putExtra("user_id", id)
-                                putExtra("user_name", name)
+                            // Remove any existing dynamic shortcuts before creating new ones. This avoids
+                            // stale entries such as "E‑Auto" remaining in the launcher.
+                            shortcutManager.removeAllDynamicShortcuts()
+                            val dynamicShortcuts = parsed.mapNotNull { (id, name, _) ->
+                                // Skip owner (0) for dynamic shortcuts
+                                if (id == 0) return@mapNotNull null
+                                val shortcutId = "eus_user_${'$'}id"
+                                val icon = loadUserShortcutIcon(context, id)
+                                val intent = Intent(context, UserSwitchShortcutActivity::class.java).apply {
+                                    action = Intent.ACTION_VIEW
+                                    putExtra("user_id", id)
+                                    putExtra("user_name", name)
+                                }
+                                android.content.pm.ShortcutInfo.Builder(context, shortcutId)
+                                    .setShortLabel(name)
+                                    .setLongLabel("Switch to ${'$'}name")
+                                    .setIcon(icon)
+                                    .setIntent(intent)
+                                    .build()
                             }
-                            android.content.pm.ShortcutInfo.Builder(context, shortcutId)
-                                .setShortLabel(name)
-                                .setLongLabel("Switch to ${'$'}name")
-                                .setIcon(icon)
-                                .setIntent(intent)
-                                .build()
-                        }
-                        // Replace all existing dynamic shortcuts with our updated list (max 4).
-                        shortcutManager.dynamicShortcuts = dynamicShortcuts.take(4)
+                            // Replace all existing dynamic shortcuts with our updated list (max 4).
+                            shortcutManager.dynamicShortcuts = dynamicShortcuts.take(4)
                         }
                         updateStatus("${parsed.size} users loaded")
                     }
@@ -363,7 +411,7 @@ fun UserSwitcherScreen() {
             },
             enabled = isConnected
         ) {
-            Text("Load Users")
+            Text("Reload Users")
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -487,5 +535,18 @@ fun UserSwitcherScreen() {
                 }
             }
         }
-    }
-}
+        }
+
+        // Settings button anchored to the bottom right of the screen.  This
+        // button opens the settings dialog when tapped.
+        IconButton(
+            modifier = Modifier.align(Alignment.BottomEnd),
+            onClick = { showSettingsDialog = true }
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Settings,
+                contentDescription = "Settings"
+            )
+        }
+    } // end Box
+} // end composable
