@@ -130,30 +130,44 @@ fun UserSwitcherScreen() {
                         updateStatus("Failed to list users")
                     } else {
                         val parsed = adbHelper.parseUsers(output)
-                        users = parsed
+                        // Sort users so that the owner (ID 0) is always first, followed by
+                        // running profiles and then the remainder ordered by ascending ID.
+                        users = parsed.sortedWith(
+                            compareBy<Triple<Int, String, Boolean>> {
+                                when {
+                                    it.first == 0 -> 0
+                                    it.third -> 1
+                                    else -> 2
+                                }
+                            }.thenBy { it.first }
+                        )
                         // Create dynamic shortcuts for up to four users (excluding owner)
                         val shortcutManager = context.getSystemService(android.content.pm.ShortcutManager::class.java)
                         if (shortcutManager != null) {
                         val dynamicShortcuts = parsed.mapNotNull { (id, name, _) ->
                             // Skip owner (0) for dynamic shortcuts
                             if (id == 0) return@mapNotNull null
-                            val shortcutId = "eus_user_$id"
-
-                            // Use one of the bundled, pre‑colored icons for shortcuts.
-                            // IMPORTANT: Android (esp. 13+) rejects ShortcutInfo icons that have
-                            // a runtime tint applied (IllegalArgumentException: "Icons with tints are not supported").
-                            // Therefore we ship 32 separate drawable PNGs:
-                            //   ic_user_switcher_color_01 .. ic_user_switcher_color_32
-                            // and deterministically map user IDs to one of them.
-                            val iconIndex = (abs(id) % 32) + 1
-                            val iconName = String.format("ic_user_switcher_color_%02d", iconIndex)
-                            val iconResId = context.resources.getIdentifier(iconName, "drawable", context.packageName)
-                            val icon = if (iconResId != 0) {
-                                android.graphics.drawable.Icon.createWithResource(context, iconResId)
+                            val shortcutId = "eus_user_${'$'}id"
+                            // Prefer numbered icons (ic_user_switcher_<id>.png) when available. These contain
+                            // both a coloured background and the user ID overlay. Fall back to one of the
+                            // 32 colour‑only icons by cycling the user ID via modulo when the numbered
+                            // resource isn't found or the ID exceeds our bundle.
+                            val numberIconName = if (id in 1..32) "ic_user_switcher_${'$'}id" else null
+                            val numberIconResId = numberIconName?.let { resName ->
+                                context.resources.getIdentifier(resName, "drawable", context.packageName)
+                            } ?: 0
+                            val icon = if (numberIconResId != 0) {
+                                android.graphics.drawable.Icon.createWithResource(context, numberIconResId)
                             } else {
-                                android.graphics.drawable.Icon.createWithResource(context, R.drawable.ic_user_switcher)
+                                val fallbackIndex = (abs(id) % 32) + 1
+                                val fallbackName = String.format("ic_user_switcher_color_%02d", fallbackIndex)
+                                val fallbackResId = context.resources.getIdentifier(fallbackName, "drawable", context.packageName)
+                                if (fallbackResId != 0) {
+                                    android.graphics.drawable.Icon.createWithResource(context, fallbackResId)
+                                } else {
+                                    android.graphics.drawable.Icon.createWithResource(context, R.drawable.ic_user_switcher)
+                                }
                             }
-
                             val intent = Intent(context, UserSwitchShortcutActivity::class.java).apply {
                                 action = Intent.ACTION_VIEW
                                 putExtra("user_id", id)
@@ -161,7 +175,7 @@ fun UserSwitcherScreen() {
                             }
                             android.content.pm.ShortcutInfo.Builder(context, shortcutId)
                                 .setShortLabel(name)
-                                .setLongLabel("Switch to $name")
+                                .setLongLabel("Switch to ${'$'}name")
                                 .setIcon(icon)
                                 .setIntent(intent)
                                 .build()
@@ -225,17 +239,25 @@ fun UserSwitcherScreen() {
                                 val shortcutManager = context.getSystemService(android.content.pm.ShortcutManager::class.java)
                                 if (shortcutManager != null && shortcutManager.isRequestPinShortcutSupported) {
                                 // On Android 13+ tinted icons for pinned shortcuts are prohibited and
-                                // cause IllegalArgumentException.  Use the untinted base icon to
-                                // create a pinned shortcut.  Colour cues are still available in
-                                // the in‑app list view.
-                                    // Use pre‑colored icons for pinned shortcuts as well (no runtime tint).
-                                    val iconIndex = (abs(id) % 32) + 1
-                                    val iconName = String.format("ic_user_switcher_color_%02d", iconIndex)
-                                    val iconResId = context.resources.getIdentifier(iconName, "drawable", context.packageName)
-                                    val baseIcon = if (iconResId != 0) {
-                                        android.graphics.drawable.Icon.createWithResource(context, iconResId)
+                                // cause IllegalArgumentException.  Prefer numbered icons for pinned
+                                // shortcuts as well (see dynamic shortcut logic).  These icons include
+                                // the user ID overlay and a coloured background.  Fallback to the
+                                // colour‑only set when no numbered resource exists.
+                                    val numberIconName = if (id in 1..32) "ic_user_switcher_${'$'}id" else null
+                                    val numberIconResId = numberIconName?.let { resName ->
+                                        context.resources.getIdentifier(resName, "drawable", context.packageName)
+                                    } ?: 0
+                                    val baseIcon = if (numberIconResId != 0) {
+                                        android.graphics.drawable.Icon.createWithResource(context, numberIconResId)
                                     } else {
-                                        android.graphics.drawable.Icon.createWithResource(context, R.drawable.ic_user_switcher)
+                                        val idx = (abs(id) % 32) + 1
+                                        val fallbackName = String.format("ic_user_switcher_color_%02d", idx)
+                                        val fallbackResId = context.resources.getIdentifier(fallbackName, "drawable", context.packageName)
+                                        if (fallbackResId != 0) {
+                                            android.graphics.drawable.Icon.createWithResource(context, fallbackResId)
+                                        } else {
+                                            android.graphics.drawable.Icon.createWithResource(context, R.drawable.ic_user_switcher)
+                                        }
                                     }
                                     val shortcut = android.content.pm.ShortcutInfo.Builder(
                                         context,
@@ -288,7 +310,17 @@ fun UserSwitcherScreen() {
                     val output = adbHelper.executeShell("pm list users")
                     if (output != null) {
                         val parsed = adbHelper.parseUsers(output)
-                        users = parsed
+                        // Maintain the same sort order during periodic refreshes: owner first,
+                        // then running users, then all others by ID.
+                        users = parsed.sortedWith(
+                            compareBy<Triple<Int, String, Boolean>> {
+                                when {
+                                    it.first == 0 -> 0
+                                    it.third -> 1
+                                    else -> 2
+                                }
+                            }.thenBy { it.first }
+                        )
                     }
                 }
             }

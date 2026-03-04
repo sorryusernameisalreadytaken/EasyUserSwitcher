@@ -143,49 +143,54 @@ class AdbHelper(private val context: Context) {
     }
 
     /**
-     * Switch to a target user and, if requested, automatically return to the main
-     * user once the device display has turned off.  When `mainUser` is equal
-     * to `targetUser`, no automatic return is scheduled.  The ADB commands
-     * executed here mirror a manual shell workflow: after switching to the
-     * target user the helper waits for the UI to become inactive (i.e. the
-     * screen turns off) by polling `dumpsys input` for the `Interactive = true`
-     * flag.  When the flag flips to false, the script sleeps briefly and
-     * switches back to the owner (user 0 by default).  Any non‑empty
-     * output from the switch command is returned to the caller to signal an
-     * error.
+     * Switch to a target user and, if requested, schedule an automatic return
+     * to the main user once the device display becomes inactive.  The
+     * automatic return logic mirrors the manual command shown in the
+     * project documentation: it continuously polls `dumpsys input` for the
+     * `Interactive = true` flag and, when the flag flips to false (i.e. the
+     * screen has turned off), waits briefly before issuing `am switch-user
+     * mainUser` to return to the owner.  To avoid blocking the caller on
+     * potentially long‑running polling, the return logic is run in a
+     * background subshell using the ampersand operator.  This ensures that
+     * the adb stream returns immediately while the polling continues on the
+     * device.  Any non‑empty output from the initial switch command is
+     * returned to the caller to signal an error.
      */
     suspend fun switchUser(targetUser: Int, mainUser: Int = 0): String? = withContext(Dispatchers.IO) {
         if (!isConnected()) return@withContext null
-        // Perform the user switch.  We capture any immediate output; a
-        // successful switch usually returns nothing.  If the switch fails
-        // (non‑empty output) we immediately propagate the result.
-        val switchCommand = "am switch-user $targetUser"
-        val result = executeShell(switchCommand)
+        // First attempt to switch to the target user.  Capture any output
+        // produced by the command; a successful switch normally yields no
+        // output.  If output is present, propagate it as an error.
+        val result = executeShell("am switch-user $targetUser")
         if (result?.isNotBlank() == true) {
             return@withContext result
         }
-        // If the target user differs from the main user, schedule an automatic
-        // switch back once the device becomes inactive.  We use dumpsys input
-        // rather than dumpsys power because the latter sometimes reports a
-        // screen‑off state even while the UI is still interactive.  The loop
-        // polls the interactive state every few seconds, then waits two
-        // additional seconds before returning to the main user.  Using
-        // semicolons to join lines avoids spawning an interactive shell.
+        // If the target user differs from the main user, prepare a polling
+        // script that monitors when the device UI becomes inactive.  Once
+        // inactive, the script sleeps briefly and then switches back to the
+        // specified main user.  The entire script is wrapped in parentheses
+        // and suffixed with `&` so that it runs asynchronously on the
+        // device.  Joining commands with semicolons avoids spawning an
+        // interactive shell.
         if (targetUser != mainUser) {
-            val script = """
-                # Poll interactive state until it is no longer true
-                while dumpsys input | grep -q "Interactive = true"; do
-                    sleep 3
-                done
-                # Give the system a moment to fully go idle
-                sleep 2
-                # Switch back to the main/owner user
-                am switch-user $mainUser
-            """.trimIndent().replace("\n", "; ")
-            // Launch the background job and ignore any output.  We don't need
-            // to await its completion since the user switch happens on the
-            // device independently.
-            executeShell(script)
+            val pollingScript = listOf(
+                // Loop until the interactive flag is no longer true
+                "while dumpsys input | grep -q \"Interactive = true\"; do",
+                // Sleep a few seconds between polls to reduce load
+                "sleep 3",
+                "done",
+                // Give the system a moment to fully idle
+                "sleep 2",
+                // Switch back to the main/owner user
+                "am switch-user $mainUser"
+            ).joinToString("; ")
+            // Launch the polling script in a background subshell.  Using
+            // parentheses groups the commands and `&` detaches them so the
+            // shell returns immediately.  We explicitly avoid capturing
+            // output from this invocation; the return value of executeShell
+            // is disregarded.
+            val fullCommand = "(" + pollingScript + ") &"
+            executeShell(fullCommand)
         }
         return@withContext null
     }
